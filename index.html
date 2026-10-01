@@ -1,0 +1,113 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Calendar API - Acceso Privado Seguro</title>
+    <!-- Cargamos la librería oficial de identidad de Google -->
+    <script src="https://google.com" async defer></script>
+</head>
+<body>
+
+    <h2>Acceso Seguro a tu Google Calendar Privado</h2>
+    
+    <!-- Botones de Control -->
+    <button id="btn-conectar" onclick="autenticarUsuario();">Conectar con Google</button>
+    <button id="btn-desconectar" onclick="cerrarSesion();" style="display: none;">Cerrar Sesión</button>
+
+    <h3>Tus Eventos Privados:</h3>
+    <ul id="eventos-lista">Inicia sesión para ver tus eventos...</ul>
+
+    <script>
+        // CONFIGURACIÓN OBLIGATORIA
+        const CLIENT_ID = '983452807710-uq9v1alecgh8tphop0s363kpbut9nltr.apps.googleusercontent.com'; // El que termina en .apps.googleusercontent.com
+        const CALENDAR_ID = 'primary'; // 'primary' toma automáticamente el calendario principal del usuario que inicia sesión
+        const SCOPES = 'https://googleapis.com'; // Permiso de solo lectura de eventos
+
+        let tokenClient;
+        let accessToken = null;
+
+        // Inicializar el cliente de Google al cargar la página
+        window.onload = function () {
+            tokenClient = google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: (tokenResponse) => {
+                    if (tokenResponse.error !== undefined) {
+                        throw tokenResponse;
+                    }
+                    // Guardamos el token de acceso temporal enviado por Google
+                    accessToken = tokenResponse.access_token;
+                    
+                    // Modificamos la interfaz
+                    document.getElementById('btn-conectar').innerText = "Refrescar Conexión";
+                    document.getElementById('btn-desconectar').style.display = "inline-block";
+                    document.getElementById('eventos-lista').innerHTML = "Cargando eventos privados...";
+                    
+                    // Llamamos a la API REST de Calendar usando el token seguro
+                    obtenerEventosPrivados();
+                },
+            });
+        };
+
+        // Función para abrir el pop-up nativo e inicio de sesión de Google
+        function autenticarUsuario() {
+            // Solicita el token. Si ya está aprobado, salta el pop-up directo de forma transparente
+            tokenClient.requestAccessToken({ prompt: 'consent' });
+        }
+
+        // Petición REST nativa utilizando el token de autorización en las cabeceras (Headers)
+        async function obtenerEventosPrivados() {
+            const url = `https://googleapis.com{encodeURIComponent(CALENDAR_ID)}/events?timeMin=${new Date().toISOString()}&orderBy=startTime&singleEvents=true`;
+
+            try {
+                const respuesta = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        // Pasamos el token temporal. Esto le demuestra a Google que tienes permiso sin exponer llaves fijas
+                        'Authorization': `Bearer ${accessToken}`
+                    }
+                });
+
+                if (!respuesta.ok) {
+                    throw new Error(`Fallo en la autenticación: ${respuesta.status}`);
+                }
+
+                const datos = await respuesta.json();
+                const eventos = datos.items;
+                const listaUI = document.getElementById('eventos-lista');
+                listaUI.innerHTML = ''; 
+
+                if (!eventos || eventos.length === 0) {
+                    listaUI.innerHTML = '<li>No se encontraron eventos próximos.</li>';
+                    return;
+                }
+
+                eventos.forEach(evento => {
+                    const li = document.createElement('li');
+                    const fecha = evento.start.dateTime || evento.start.date;
+                    li.innerHTML = `<strong>${evento.summary}</strong> - 📅 ${new Date(fecha).toLocaleString()}`;
+                    listaUI.appendChild(li);
+                });
+
+            } catch (error) {
+                console.error("Error al consultar la API:", error);
+                document.getElementById('eventos-lista').innerHTML = `<li style="color: red;">Error al leer el calendario privado. Asegúrate de aceptar los permisos en el pop-up.</li>`;
+            }
+        }
+
+        function cerrarSesion() {
+            if (accessToken !== null) {
+                google.accounts.oauth2.revokeToken(accessToken, () => {
+                    accessToken = null;
+                    document.getElementById('btn-conectar').innerText = "Conectar con Google";
+                    document.getElementById('btn-desconectar').style.display = "none";
+                    document.getElementById('eventos-lista').innerHTML = "Sesión cerrada. Inicia sesión nuevamente.";
+                });
+            }
+        }
+    </script>
+</body>
+</html>
+
