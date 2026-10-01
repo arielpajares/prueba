@@ -72,6 +72,681 @@
       border-left: 4px solid #1a73e8;
       padding: 14px;
       border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .metric-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+      background-color: #f0f4f9;
+    }
+    .metric-card.active {
+      background-color: #e8f0fe;
+      border-color: #1a73e8;
+      box-shadow: 0 0 0 2px #1a73e8;
+    }
+    .metric-card.accent {
+      border-left-color: #28a745;
+      background-color: #f1f8f3;
+    }
+    .metric-card.accent:hover {
+      background-color: #e2f3e7;
+    }
+    .metric-card.accent.active {
+      background-color: #e6f4ea;
+      box-shadow: 0 0 0 2px #28a745;
+    }
+    .metric-label {
+      font-size: 12px;
+      color: #6c757d;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .metric-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1a73e8;
+      margin-top: 5px;
+    }
+    .metric-card.accent .metric-value {
+      color: #28a745;
+    }
+    .click-hint {
+      font-size: 10px;
+      color: #80868b;
+      margin-top: 4px;
+      display: block;
+    }
+
+    /* Filters */
+    .filters {
+      padding: 18px;
+      background-color: #f8f9fa;
+      border-radius: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      align-items: flex-end;
+      margin-bottom: 20px;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .filter-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #555;
+    }
+    select, input[type="date"] {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+      background-color: #fff;
+    }
+    .active-view-banner {
+      background-color: #e8f0fe;
+      border: 1px solid #d2e3fc;
+      color: #174ea6;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+      margin-top: 15px;
+    }
+    li {
+      padding: 16px;
+      border: 1px solid #eee;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      background: #fff;
+    }
+    .event-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .event-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .event-price {
+      background-color: #e6f4ea;
+      color: #137333;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .event-time {
+      font-size: 13px;
+      color: #666;
+    }
+    .event-desc {
+      font-size: 13px;
+      color: #444;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #f0f0f0;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Gestión de Trabajos y Ganancias - Google Calendar</h2>
+    
+    <!-- Sign-In / Sign-Out Controls -->
+    <div id="auth-section">
+      <button id="authorize-btn" onclick="handleAuthClick()">Conectar Google Calendar</button>
+      <button id="signout-btn" class="logout hidden" onclick="handleSignoutClick()">Cerrar Sesión</button>
+    </div>
+
+    <!-- Calendar Data & Dashboard Display -->
+    <div id="content" class="hidden">
+      
+      <!-- Resumen de Ganancias en la Parte Superior -->
+      <div style="margin-top: 20px;">
+        <div class="dashboard-header">
+          <div class="dashboard-title">Resumen de Ganancias Generales</div>
+          <button onclick="loadGlobalDashboardMetrics()" style="font-size: 12px; padding: 6px 12px;">Recargar Estadísticas Globales</button>
+        </div>
+        <div class="metrics-grid">
+          <div class="metric-card" id="card-week" onclick="filterByMetric('week')">
+            <div class="metric-label">Esta Semana</div>
+            <div class="metric-value" id="stat-week">$0</div>
+            <span class="click-hint">Toca para ver trabajos</span>
+          </div>
+          <div class="metric-card" id="card-month" onclick="filterByMetric('month')">
+            <div class="metric-label">Este Mes</div>
+            <div class="metric-value" id="stat-month">$0</div>
+            <span class="click-hint">Toca para ver trabajos</span>
+          </div>
+          <div class="metric-card" id="card-6months" onclick="filterByMetric('6months')">
+            <div class="metric-label">Últimos 6 Meses</div>
+            <div class="metric-value" id="stat-6months">$0</div>
+            <span class="click-hint">Toca para ver trabajos</span>
+          </div>
+          <div class="metric-card" id="card-year" onclick="filterByMetric('year')">
+            <div class="metric-label">Este Año</div>
+            <div class="metric-value" id="stat-year">$0</div>
+            <span class="click-hint">Toca para ver trabajos</span>
+          </div>
+          <div class="metric-card accent active" id="card-search" onclick="filterByMetric('search')">
+            <div class="metric-label" id="stat-range-label">Total Búsqueda Actual</div>
+            <div class="metric-value" id="stat-range-total">$0</div>
+            <span class="click-hint">Toca para ver trabajos</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel de filtros / búsqueda -->
+      <div class="filters">
+        <div class="filter-group">
+          <label for="search-type">Modo de consulta:</label>
+          <select id="search-type" onchange="toggleFilterInputs()">
+            <option value="recent">Próximos / Recientes</option>
+            <option value="single-date">Fecha específica</option>
+            <option value="date-range">Rango de fechas</option>
+          </select>
+        </div>
+
+        <!-- Opción 1: Cantidad de eventos -->
+        <div class="filter-group" id="limit-group">
+          <label for="event-limit">Cantidad:</label>
+          <select id="event-limit">
+            <option value="5">5 Trabajos</option>
+            <option value="10" selected>10 Trabajos</option>
+            <option value="100">100 Trabajos</option>
+            <option value="9999">Todos los trabajos</option>
+          </select>
+        </div>
+
+        <!-- Opción 2: Fecha única -->
+        <div class="filter-group hidden" id="single-date-group">
+          <label for="single-date-input">Fecha:</label>
+          <input type="date" id="single-date-input" />
+        </div>
+
+        <!-- Opción 3: Rango de fechas -->
+        <div class="filter-group hidden" id="range-start-group">
+          <label for="range-start-input">Desde:</label>
+          <input type="date" id="range-start-input" />
+        </div>
+        <div class="filter-group hidden" id="range-end-group">
+          <label for="range-end-input">Hasta:</label>
+          <input type="date" id="range-end-input" />
+        </div>
+
+        <button onclick="fetchCalendarEvents()">Buscar / Filtrar</button>
+      </div>
+
+      <!-- Banner Informativo de la Vista Activa -->
+      <div class="active-view-banner" id="active-view-banner">
+        <span id="banner-text">Mostrando resultados de la búsqueda personalizada</span>
+      </div>
+
+      <h3>Listado de Trabajos Encontrados (<span id="event-count">0</span>)</h3>
+      <ul id="events-list"></ul>
+    </div>
+  </div>
+
+  <script>
+    const CLIENT_ID = '983452807710-uq9v1alecgh8tphop0s363kpbut9nltr.apps.googleusercontent.com';
+    const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
+    const CALENDAR_ID = 'pajaresmartin070@gmail.com';
+
+    let tokenClient;
+    let accessToken = null;
+
+    // Almacenamiento global de trabajos procesados para filtrado dinámico
+    let globalJobsStore = [];
+    let currentSearchJobsStore = [];
+
+    window.onload = function() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: (tokenResponse) => {
+          if (tokenResponse.error) {
+            console.error('Error durante la autenticación:', tokenResponse);
+            return;
+          }
+          accessToken = tokenResponse.access_token;
+          
+          document.getElementById('authorize-btn').classList.add('hidden');
+          document.getElementById('signout-btn').classList.remove('hidden');
+          document.getElementById('content').classList.remove('hidden');
+
+          loadGlobalDashboardMetrics();
+          fetchCalendarEvents();
+        },
+      });
+    };
+
+    function handleAuthClick() {
+      if (!accessToken) {
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+      } else {
+        tokenClient.requestAccessToken({ prompt: '' });
+      }
+    }
+
+    function handleSignoutClick() {
+      if (accessToken) {
+        google.accounts.oauth2.revoke(accessToken, () => {
+          accessToken = null;
+          document.getElementById('authorize-btn').classList.remove('hidden');
+          document.getElementById('signout-btn').classList.add('hidden');
+          document.getElementById('content').classList.add('hidden');
+          document.getElementById('events-list').innerHTML = '';
+        });
+      }
+    }
+
+    function toggleFilterInputs() {
+      const searchType = document.getElementById('search-type').value;
+      document.getElementById('limit-group').classList.toggle('hidden', searchType !== 'recent');
+      document.getElementById('single-date-group').classList.toggle('hidden', searchType !== 'single-date');
+      document.getElementById('range-start-group').classList.toggle('hidden', searchType !== 'date-range');
+      document.getElementById('range-end-group').classList.toggle('hidden', searchType !== 'date-range');
+    }
+
+    function extractJobPrice(text) {
+      if (!text) return null;
+
+      let cleanedText = text
+        .replace(/(\+?\d{1,3}[\s-]?)?\(?\d{2,4}\)?[\s-]?\d{3,4}[\s-]?\d{3,4}/g, ' ') 
+        .replace(/\b09\d[\s-]?\d{3}[\s-]?\d{3}\b/g, ' ')                          
+        .replace(/\b2\d{3}[\s-]?\d{4}\b/g, ' ');                                  
+
+      const numberMatches = cleanedText.match(/\b\d{3,}\b/g);
+      if (!numberMatches) return null;
+
+      const validPrices = numberMatches
+        .map(n => parseInt(n, 10))
+        .filter(n => !isNaN(n));
+
+      if (validPrices.length === 0) return null;
+
+      return Math.max(...validPrices);
+    }
+
+    async function loadGlobalDashboardMetrics() {
+      document.getElementById('stat-week').textContent = '...';
+      document.getElementById('stat-month').textContent = '...';
+      document.getElementById('stat-6months').textContent = '...';
+      document.getElementById('stat-year').textContent = '...';
+
+      const now = new Date();
+      const startOfYear = new Date(now.getFullYear(), 0, 1).toISOString();
+
+      let baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${encodeURIComponent(startOfYear)}`;
+      
+      try {
+        let globalEvents = [];
+        let pageToken = null;
+
+        do {
+          let endpoint = baseUrl;
+          if (pageToken) {
+            endpoint += `&pageToken=${encodeURIComponent(pageToken)}`;
+          }
+
+          const response = await fetch(endpoint, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+
+          if (!response.ok) break;
+
+          const data = await response.json();
+          if (data.items) {
+            globalEvents = globalEvents.concat(data.items);
+          }
+          pageToken = data.nextPageToken;
+
+        } while (pageToken);
+
+        globalJobsStore = [];
+
+        globalEvents.forEach(event => {
+          const title = event.summary || '';
+          const desc = event.description || '';
+          const fullContent = `${title}\n${desc}`.trim();
+
+          if (fullContent.length > 300) return;
+
+          const price = extractJobPrice(fullContent);
+
+          if (price !== null) {
+            globalJobsStore.push({
+              id: event.id,
+              summary: title || 'Trabajo sin título',
+              description: desc,
+              price: price,
+              startDate: new Date(event.start.dateTime || event.start.date),
+              endDate: event.end ? new Date(event.end.dateTime || event.end.date) : null
+            });
+          }
+        });
+
+        // Calcular Estadísticas Fijas
+        const startOfWeek = new Date(now);
+        const day = startOfWeek.getDay() || 7;
+        startOfWeek.setDate(startOfWeek.getDate() - day + 1);
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const startOf6Months = new Date(now);
+        startOf6Months.setMonth(startOf6Months.getMonth() - 6);
+
+        let weekTotal = 0;
+        let monthTotal = 0;
+        let sixMonthTotal = 0;
+        let yearTotal = 0;
+
+        globalJobsStore.forEach(job => {
+          const price = job.price;
+          const date = job.startDate;
+
+          if (date >= startOfWeek) weekTotal += price;
+          if (date >= startOfMonth) monthTotal += price;
+          if (date >= startOf6Months) sixMonthTotal += price;
+          yearTotal += price;
+        });
+
+        document.getElementById('stat-week').textContent = `$ ${weekTotal.toLocaleString()}`;
+        document.getElementById('stat-month').textContent = `$ ${monthTotal.toLocaleString()}`;
+        document.getElementById('stat-6months').textContent = `$ ${sixMonthTotal.toLocaleString()}`;
+        document.getElementById('stat-year').textContent = `$ ${yearTotal.toLocaleString()}`;
+
+      } catch (error) {
+        console.error('Error calculando estadísticas fijas:', error);
+      }
+    }
+
+    async function fetchCalendarEvents() {
+      const eventsList = document.getElementById('events-list');
+      eventsList.innerHTML = '<li>Cargando y procesando trabajos...</li>';
+
+      const searchType = document.getElementById('search-type').value;
+      let baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?singleEvents=true&orderBy=startTime&maxResults=250`;
+      let queryParams = '';
+
+      if (searchType === 'recent') {
+        const now = new Date().toISOString();
+        queryParams += `&timeMin=${encodeURIComponent(now)}`;
+      } 
+      else if (searchType === 'single-date') {
+        const dateVal = document.getElementById('single-date-input').value;
+        if (!dateVal) {
+          eventsList.innerHTML = '<li>Por favor selecciona una fecha.</li>';
+          return;
+        }
+        const timeMin = new Date(`${dateVal}T00:00:00`).toISOString();
+        const timeMax = new Date(`${dateVal}T23:59:59`).toISOString();
+        queryParams += `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`;
+      } 
+      else if (searchType === 'date-range') {
+        const startVal = document.getElementById('range-start-input').value;
+        const endVal = document.getElementById('range-end-input').value;
+
+        if (!startVal && !endVal) {
+          eventsList.innerHTML = '<li>Por favor selecciona al menos una fecha (desde o hasta).</li>';
+          return;
+        }
+        if (startVal) {
+          const timeMin = new Date(`${startVal}T00:00:00`).toISOString();
+          queryParams += `&timeMin=${encodeURIComponent(timeMin)}`;
+        }
+        if (endVal) {
+          const timeMax = new Date(`${endVal}T23:59:59`).toISOString();
+          queryParams += `&timeMax=${encodeURIComponent(timeMax)}`;
+        }
+      }
+
+      try {
+        let rawEvents = [];
+        let pageToken = null;
+
+        do {
+          let endpoint = baseUrl + queryParams;
+          if (pageToken) {
+            endpoint += `&pageToken=${encodeURIComponent(pageToken)}`;
+          }
+
+          const response = await fetch(endpoint, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+
+          if (!response.ok) {
+            throw new Error(`Error API (${response.status}): ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          if (data.items) {
+            rawEvents = rawEvents.concat(data.items);
+          }
+          pageToken = data.nextPageToken;
+
+        } while (pageToken);
+
+        let processedJobs = [];
+
+        rawEvents.forEach(event => {
+          const title = event.summary || '';
+          const desc = event.description || '';
+          const fullContent = `${title}\n${desc}`.trim();
+
+          if (fullContent.length > 300) return;
+
+          const price = extractJobPrice(fullContent);
+
+          if (price !== null) {
+            processedJobs.push({
+              id: event.id,
+              summary: title || 'Trabajo sin título',
+              description: desc,
+              price: price,
+              startDate: new Date(event.start.dateTime || event.start.date),
+              endDate: event.end ? new Date(event.end.dateTime || event.end.date) : null
+            });
+          }
+        });
+
+        if (searchType === 'recent') {
+          const limit = parseInt(document.getElementById('event-limit').value, 10);
+          currentSearchJobsStore = processedJobs.slice(0, limit);
+        } else {
+          currentSearchJobsStore = processedJobs;
+        }
+
+        let searchTotal = currentSearchJobsStore.reduce((acc, job) => acc + job.price, 0);
+        document.getElementById('stat-range-total').textContent = `$ ${searchTotal.toLocaleString()}`;
+
+        // Mostrar por defecto la vista de la búsqueda realizada
+        filterByMetric('search');
+
+      } catch (error) {
+        console.error('Error al obtener eventos:', error);
+        eventsList.innerHTML = `<li>Error al cargar eventos: ${error.message}</li>`;
+      }
+    }
+
+    // Filtra la lista según la tarjeta de estadística presionada
+    function filterByMetric(metricKey) {
+      // Remover clase 'active' de todas las tarjetas
+      document.querySelectorAll('.metric-card').forEach(card => card.classList.remove('active'));
+
+      let jobsToDisplay = [];
+      let bannerMessage = '';
+      const now = new Date();
+
+      switch (metricKey) {
+        case 'week':
+          document.getElementById('card-week').classList.add('active');
+          const startOfWeek = new Date(now);
+          const day = startOfWeek.getDay() || 7;
+          startOfWeek.setDate(startOfWeek.getDate() - day + 1);
+          startOfWeek.setHours(0, 0, 0, 0);
+
+          jobsToDisplay = globalJobsStore.filter(j => j.startDate >= startOfWeek);
+          bannerMessage = 'Viendo únicamente trabajos de Esta Semana';
+          break;
+
+        case 'month':
+          document.getElementById('card-month').classList.add('active');
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+          jobsToDisplay = globalJobsStore.filter(j => j.startDate >= startOfMonth);
+          bannerMessage = 'Viendo únicamente trabajos de Este Mes';
+          break;
+
+        case '6months':
+          document.getElementById('card-6months').classList.add('active');
+          const startOf6Months = new Date(now);
+          startOf6Months.setMonth(startOf6Months.getMonth() - 6);
+
+          jobsToDisplay = globalJobsStore.filter(j => j.startDate >= startOf6Months);
+          bannerMessage = 'Viendo únicamente trabajos de los Últimos 6 Meses';
+          break;
+
+        case 'year':
+          document.getElementById('card-year').classList.add('active');
+          const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+          jobsToDisplay = globalJobsStore.filter(j => j.startDate >= startOfYear);
+          bannerMessage = 'Viendo únicamente trabajos de Este Año';
+          break;
+
+        case 'search':
+        default:
+          document.getElementById('card-search').classList.add('active');
+          jobsToDisplay = currentSearchJobsStore;
+          bannerMessage = 'Mostrando resultados según la búsqueda / filtro de abajo';
+          break;
+      }
+
+      document.getElementById('banner-text').textContent = bannerMessage;
+      renderJobsList(jobsToDisplay);
+    }
+
+    function renderJobsList(jobs) {
+      const eventsList = document.getElementById('events-list');
+      document.getElementById('event-count').textContent = jobs.length;
+      eventsList.innerHTML = '';
+
+      if (jobs.length === 0) {
+        eventsList.innerHTML = '<li>No se encontraron eventos de trabajo para esta estadística.</li>';
+        return;
+      }
+
+      jobs.forEach(job => {
+        const li = document.createElement('li');
+        li.innerHTML = `
+          <div class="event-header">
+            <span class="event-title">${job.summary}</span>
+            <span class="event-price">$ ${job.price.toLocaleString()}</span>
+          </div>
+          <div class="event-time">
+            <strong>Fecha:</strong> ${job.startDate.toLocaleString()}
+            ${job.endDate ? ` | <strong>Hasta:</strong> ${job.endDate.toLocaleString()}` : ''}
+          </div>
+          ${job.description ? `<div class="event-desc">${job.description}</div>` : ''}
+        `;
+        eventsList.appendChild(li);
+      });
+    }
+  </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google Calendar OAuth Viewer - Dashboard de Trabajos</title>
+  <!-- Load Google Identity Services library -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      max-width: 950px;
+      margin: 30px auto;
+      padding: 0 20px;
+      color: #333;
+      background-color: #f4f6f8;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 24px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+    }
+    button {
+      background-color: #1a73e8;
+      color: white;
+      border: none;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    button:hover {
+      background-color: #1557b0;
+    }
+    button.logout {
+      background-color: #dc3545;
+    }
+    button.logout:hover {
+      background-color: #bd2130;
+    }
+    .hidden {
+      display: none;
+    }
+    
+    /* Dashboard Metrics */
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .dashboard-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #202124;
+      margin: 0;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    .metric-card {
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-left: 4px solid #1a73e8;
+      padding: 14px;
+      border-radius: 6px;
     }
     .metric-card.accent {
       border-left-color: #28a745;
