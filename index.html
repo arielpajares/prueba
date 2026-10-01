@@ -1,113 +1,180 @@
-
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Google Calendar API - Acceso Privado Seguro</title>
-    <!-- Cargamos la librería oficial de identidad de Google -->
-    <script src="https://google.com" async defer></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Google Calendar OAuth Viewer</title>
+  <!-- Load Google Identity Services library -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #333;
+    }
+    .card {
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    button {
+      background-color: #1a73e8;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+    }
+    button:hover {
+      background-color: #1557b0;
+    }
+    button.logout {
+      background-color: #dc3545;
+    }
+    button.logout:hover {
+      background-color: #bd2130;
+    }
+    .hidden {
+      display: none;
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+    }
+    li {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+    }
+    li:last-child {
+      border-bottom: none;
+    }
+    .event-time {
+      font-size: 12px;
+      color: #666;
+    }
+  </style>
 </head>
 <body>
 
-    <h2>Acceso Seguro a tu Google Calendar Privado</h2>
+  <div class="card">
+    <h2>Google Calendar API (OAuth 2.0)</h2>
     
-    <!-- Botones de Control -->
-    <button id="btn-conectar" onclick="autenticarUsuario();">Conectar con Google</button>
-    <button id="btn-desconectar" onclick="cerrarSesion();" style="display: none;">Cerrar Sesión</button>
+    <!-- Sign-In / Sign-Out Controls -->
+    <div id="auth-section">
+      <button id="authorize-btn" onclick="handleAuthClick()">Connect Google Calendar</button>
+      <button id="signout-btn" class="logout hidden" onclick="handleSignoutClick()">Sign Out</button>
+    </div>
 
-    <h3>Tus Eventos Privados:</h3>
-    <ul id="eventos-lista">Inicia sesión para ver tus eventos...</ul>
+    <!-- Calendar Data Display -->
+    <div id="content" class="hidden">
+      <h3>Upcoming Events</h3>
+      <ul id="events-list"></ul>
+    </div>
+  </div>
 
-    <script>
-        // CONFIGURACIÓN OBLIGATORIA
-        const CLIENT_ID = '983452807710-uq9v1alecgh8tphop0s363kpbut9nltr.apps.googleusercontent.com'; // El que termina en .apps.googleusercontent.com
-        const CALENDAR_ID = 'primary'; // 'primary' toma automáticamente el calendario principal del usuario que inicia sesión
-        const SCOPES = 'https://googleapis.com'; // Permiso de solo lectura de eventos
+  <script>
+    // Configuration Settings
+    const CLIENT_ID = '983452807710-uq9v1alecgh8tphop0s363kpbut9nltr.apps.googleusercontent.com';
+    const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
 
-        let tokenClient;
-        let accessToken = null;
+    let tokenClient;
+    let accessToken = null;
 
-        // Inicializar el cliente de Google al cargar la página
-        window.onload = function () {
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
-                callback: (tokenResponse) => {
-                    if (tokenResponse.error !== undefined) {
-                        throw tokenResponse;
-                    }
-                    // Guardamos el token de acceso temporal enviado por Google
-                    accessToken = tokenResponse.access_token;
-                    
-                    // Modificamos la interfaz
-                    document.getElementById('btn-conectar').innerText = "Refrescar Conexión";
-                    document.getElementById('btn-desconectar').style.display = "inline-block";
-                    document.getElementById('eventos-lista').innerHTML = "Cargando eventos privados...";
-                    
-                    // Llamamos a la API REST de Calendar usando el token seguro
-                    obtenerEventosPrivados();
-                },
-            });
-        };
+    // Initialize GIS Client once the page loads
+    window.onload = function() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: (tokenResponse) => {
+          if (tokenResponse.error) {
+            console.error('Error during token retrieval:', tokenResponse);
+            return;
+          }
+          accessToken = tokenResponse.access_token;
+          
+          // Update UI state
+          document.getElementById('authorize-btn').classList.add('hidden');
+          document.getElementById('signout-btn').classList.remove('hidden');
+          document.getElementById('content').classList.remove('hidden');
 
-        // Función para abrir el pop-up nativo e inicio de sesión de Google
-        function autenticarUsuario() {
-            // Solicita el token. Si ya está aprobado, salta el pop-up directo de forma transparente
-            tokenClient.requestAccessToken({ prompt: 'consent' });
+          // Fetch user calendar information
+          fetchCalendarEvents();
+        },
+      });
+    };
+
+    // Trigger OAuth Authorization Flow
+    function handleAuthClick() {
+      if (!accessToken) {
+        // Prompt user to grant permission
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+      } else {
+        tokenClient.requestAccessToken({ prompt: '' });
+      }
+    }
+
+    // Revoke token and reset UI
+    function handleSignoutClick() {
+      if (accessToken) {
+        google.accounts.oauth2.revoke(accessToken, () => {
+          accessToken = null;
+          document.getElementById('authorize-btn').classList.remove('hidden');
+          document.getElementById('signout-btn').classList.add('hidden');
+          document.getElementById('content').classList.add('hidden');
+          document.getElementById('events-list').innerHTML = '';
+        });
+      }
+    }
+
+    // Fetch primary calendar events using the OAuth Access Token
+    async function fetchCalendarEvents() {
+      const eventsList = document.getElementById('events-list');
+      eventsList.innerHTML = 'Loading events...';
+
+      const now = new Date().toISOString();
+      const endpoint = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now)}&maxResults=10&orderBy=startTime&singleEvents=true`;
+
+      try {
+        const response = await fetch(endpoint, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
         }
 
-        // Petición REST nativa utilizando el token de autorización en las cabeceras (Headers)
-        async function obtenerEventosPrivados() {
-            const url = `https://googleapis.com{encodeURIComponent(CALENDAR_ID)}/events?timeMin=${new Date().toISOString()}&orderBy=startTime&singleEvents=true`;
+        const data = await response.json();
+        const events = data.items;
 
-            try {
-                const respuesta = await fetch(url, {
-                    method: 'GET',
-                    headers: {
-                        // Pasamos el token temporal. Esto le demuestra a Google que tienes permiso sin exponer llaves fijas
-                        'Authorization': `Bearer ${accessToken}`
-                    }
-                });
-
-                if (!respuesta.ok) {
-                    throw new Error(`Fallo en la autenticación: ${respuesta.status}`);
-                }
-
-                const datos = await respuesta.json();
-                const eventos = datos.items;
-                const listaUI = document.getElementById('eventos-lista');
-                listaUI.innerHTML = ''; 
-
-                if (!eventos || eventos.length === 0) {
-                    listaUI.innerHTML = '<li>No se encontraron eventos próximos.</li>';
-                    return;
-                }
-
-                eventos.forEach(evento => {
-                    const li = document.createElement('li');
-                    const fecha = evento.start.dateTime || evento.start.date;
-                    li.innerHTML = `<strong>${evento.summary}</strong> - 📅 ${new Date(fecha).toLocaleString()}`;
-                    listaUI.appendChild(li);
-                });
-
-            } catch (error) {
-                console.error("Error al consultar la API:", error);
-                document.getElementById('eventos-lista').innerHTML = `<li style="color: red;">Error al leer el calendario privado. Asegúrate de aceptar los permisos en el pop-up.</li>`;
-            }
+        eventsList.innerHTML = '';
+        if (!events || events.length === 0) {
+          eventsList.innerHTML = '<li>No upcoming events found.</li>';
+          return;
         }
 
-        function cerrarSesion() {
-            if (accessToken !== null) {
-                google.accounts.oauth2.revokeToken(accessToken, () => {
-                    accessToken = null;
-                    document.getElementById('btn-conectar').innerText = "Conectar con Google";
-                    document.getElementById('btn-desconectar').style.display = "none";
-                    document.getElementById('eventos-lista').innerHTML = "Sesión cerrada. Inicia sesión nuevamente.";
-                });
-            }
-        }
-    </script>
+        events.forEach(event => {
+          const start = event.start.dateTime || event.start.date;
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <strong>${event.summary || 'Untitled Event'}</strong><br/>
+            <span class="event-time">${new Date(start).toLocaleString()}</span>
+          `;
+          eventsList.appendChild(li);
+        });
+
+      } catch (error) {
+        console.error('Failed to fetch events:', error);
+        eventsList.innerHTML = `<li>Error fetching events: ${error.message}</li>`;
+      }
+    }
+  </script>
 </body>
 </html>
-
