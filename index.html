@@ -218,84 +218,93 @@
     }
 
     // Consulta la API de Google Calendar
-    async function fetchCalendarEvents() {
-      const eventsList = document.getElementById('events-list');
-      eventsList.innerHTML = 'Cargando eventos...';
+    // Consulta la API de Google Calendar
+async function fetchCalendarEvents() {
+  const eventsList = document.getElementById('events-list');
+  eventsList.innerHTML = 'Cargando eventos...';
 
-      const searchType = document.getElementById('search-type').value;
-      
-      // Base endpoint utilizando el ID del calendario especificado
-      let endpoint = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?singleEvents=true&orderBy=startTime`;
+  const searchType = document.getElementById('search-type').value;
+  
+  // Base endpoint utilizando el ID del calendario especificado
+  let endpoint = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?singleEvents=true&orderBy=startTime`;
 
-      if (searchType === 'recent') {
-        const limit = document.getElementById('event-limit').value;
-        endpoint += `&maxResults=${limit}`;
-      } 
-      else if (searchType === 'single-date') {
-        const dateVal = document.getElementById('single-date-input').value;
-        if (!dateVal) {
-          eventsList.innerHTML = '<li>Por favor selecciona una fecha.</li>';
-          return;
-        }
-        // Inicio y fin del día seleccionado en formato ISO
-        const timeMin = new Date(`${dateVal}T00:00:00`).toISOString();
-        const timeMax = new Date(`${dateVal}T23:59:59`).toISOString();
-        endpoint += `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`;
-      } 
-      else if (searchType === 'date-range') {
-        const startVal = document.getElementById('range-start-input').value;
-        const endVal = document.getElementById('range-end-input').value;
-
-        if (!startVal || !endVal) {
-          eventsList.innerHTML = '<li>Por favor selecciona ambas fechas (desde y hasta).</li>';
-          return;
-        }
-        const timeMin = new Date(`${startVal}T00:00:00`).toISOString();
-        const timeMax = new Date(`${endVal}T23:59:59`).toISOString();
-        endpoint += `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`;
-      }
-
-      try {
-        const response = await fetch(endpoint, {
-          headers: {
-            'Authorization': `Bearer ${accessToken}`
-          }
-        });
-
-        if (!response.ok) {
-          throw new Error(`Error API (${response.status}): ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const events = data.items;
-
-        eventsList.innerHTML = '';
-        if (!events || events.length === 0) {
-          eventsList.innerHTML = '<li>No se encontraron eventos para los criterios seleccionados.</li>';
-          return;
-        }
-
-        events.forEach(event => {
-          const start = event.start.dateTime || event.start.date;
-          const end = event.end.dateTime || event.end.date;
-          
-          const li = document.createElement('li');
-          li.innerHTML = `
-            <strong>${event.summary || 'Sin título'}</strong><br/>
-            <span class="event-time">
-              <strong>Inicio:</strong> ${new Date(start).toLocaleString()} 
-              ${event.end ? `| <strong>Fin:</strong> ${new Date(end).toLocaleString()}` : ''}
-            </span>
-            ${event.description ? `<div class="event-desc">${event.description}</div>` : ''}
-          `;
-          eventsList.appendChild(li);
-        });
-
-      } catch (error) {
-        console.error('Error al obtener eventos:', error);
-        eventsList.innerHTML = `<li>Error al cargar eventos: ${error.message}</li>`;
-      }
+  if (searchType === 'recent') {
+    const limit = document.getElementById('event-limit').value;
+    // CORRECCIÓN: Para ver eventos actuales/próximos, filtramos a partir de la fecha y hora actual
+    const now = new Date().toISOString();
+    endpoint += `&timeMin=${encodeURIComponent(now)}&maxResults=${limit}`;
+  } 
+  else if (searchType === 'single-date') {
+    const dateVal = document.getElementById('single-date-input').value;
+    if (!dateVal) {
+      eventsList.innerHTML = '<li>Por favor selecciona una fecha.</li>';
+      return;
     }
-  </script>
+    const timeMin = new Date(`${dateVal}T00:00:00`).toISOString();
+    const timeMax = new Date(`${dateVal}T23:59:59`).toISOString();
+    endpoint += `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`;
+  } 
+  else if (searchType === 'date-range') {
+    const startVal = document.getElementById('range-start-input').value;
+    const endVal = document.getElementById('range-end-input').value;
+
+    if (!startVal && !endVal) {
+      eventsList.innerHTML = '<li>Por favor selecciona al menos una fecha (desde o hasta).</li>';
+      return;
+    }
+
+    // CORRECCIÓN: Permite enviar solo "Desde", solo "Hasta" o ambas fechas
+    if (startVal) {
+      const timeMin = new Date(`${startVal}T00:00:00`).toISOString();
+      endpoint += `&timeMin=${encodeURIComponent(timeMin)}`;
+    }
+    if (endVal) {
+      const timeMax = new Date(`${endVal}T23:59:59`).toISOString();
+      endpoint += `&timeMax=${encodeURIComponent(timeMax)}`;
+    }
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error API (${response.status}): ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const events = data.items;
+
+    eventsList.innerHTML = '';
+    if (!events || events.length === 0) {
+      eventsList.innerHTML = '<li>No se encontraron eventos para los criterios seleccionados.</li>';
+      return;
+    }
+
+    events.forEach(event => {
+      const start = event.start.dateTime || event.start.date;
+      const end = event.end ? (event.end.dateTime || event.end.date) : null;
+      
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <strong>${event.summary || 'Sin título'}</strong><br/>
+        <span class="event-time">
+          <strong>Inicio:</strong> ${new Date(start).toLocaleString()} 
+          ${end ? `| <strong>Fin:</strong> ${new Date(end).toLocaleString()}` : ''}
+        </span>
+        ${event.description ? `<div class="event-desc">${event.description}</div>` : ''}
+      `;
+      eventsList.appendChild(li);
+    });
+
+  } catch (error) {
+    console.error('Error al obtener eventos:', error);
+    eventsList.innerHTML = `<li>Error al cargar eventos: ${error.message}</li>`;
+  }
+}
+    </script>
 </body>
 </html>
