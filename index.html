@@ -3,22 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Google Calendar OAuth Viewer</title>
+  <title>Google Calendar OAuth Viewer - Dashboard de Trabajos</title>
   <!-- Load Google Identity Services library -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      max-width: 850px;
-      margin: 40px auto;
+      max-width: 950px;
+      margin: 30px auto;
       padding: 0 20px;
       color: #333;
+      background-color: #f4f6f8;
     }
     .card {
+      background: #fff;
       border: 1px solid #e0e0e0;
-      border-radius: 8px;
+      border-radius: 10px;
       padding: 24px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
     }
     button {
       background-color: #1a73e8;
@@ -27,9 +30,9 @@
       padding: 10px 18px;
       font-size: 14px;
       font-weight: 500;
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
-      margin-right: 10px;
+      transition: background-color 0.2s;
     }
     button:hover {
       background-color: #1557b0;
@@ -43,15 +46,57 @@
     .hidden {
       display: none;
     }
-    .filters {
-      margin-top: 20px;
-      padding: 16px;
-      background-color: #f8f9fa;
+    
+    /* Dashboard Metrics */
+    .dashboard-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 15px;
+      color: #202124;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    .metric-card {
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-left: 4px solid #1a73e8;
+      padding: 14px;
       border-radius: 6px;
+    }
+    .metric-card.accent {
+      border-left-color: #28a745;
+      background-color: #f1f8f3;
+    }
+    .metric-label {
+      font-size: 12px;
+      color: #6c757d;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .metric-value {
+      font-size: 20px;
+      font-weight: 700;
+      color: #1a73e8;
+      margin-top: 5px;
+    }
+    .metric-card.accent .metric-value {
+      color: #28a745;
+    }
+
+    /* Filters */
+    .filters {
+      padding: 18px;
+      background-color: #f8f9fa;
+      border-radius: 8px;
       display: flex;
       flex-wrap: wrap;
       gap: 15px;
       align-items: flex-end;
+      margin-bottom: 20px;
     }
     .filter-group {
       display: flex;
@@ -68,34 +113,56 @@
       border: 1px solid #ccc;
       border-radius: 4px;
       font-size: 14px;
+      background-color: #fff;
     }
     ul {
       list-style-type: none;
       padding: 0;
-      margin-top: 20px;
+      margin-top: 15px;
     }
     li {
-      padding: 12px;
-      border-bottom: 1px solid #eee;
+      padding: 16px;
+      border: 1px solid #eee;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      background: #fff;
     }
-    li:last-child {
-      border-bottom: none;
+    .event-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .event-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .event-price {
+      background-color: #e6f4ea;
+      color: #137333;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 700;
+      font-size: 14px;
     }
     .event-time {
-      font-size: 12px;
+      font-size: 13px;
       color: #666;
     }
     .event-desc {
       font-size: 13px;
       color: #444;
-      margin-top: 4px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #f0f0f0;
+      white-space: pre-wrap;
     }
   </style>
 </head>
 <body>
 
   <div class="card">
-    <h2>Google Calendar API (OAuth 2.0)</h2>
+    <h2>Gestión de Trabajos y Ganancias - Google Calendar</h2>
     
     <!-- Sign-In / Sign-Out Controls -->
     <div id="auth-section">
@@ -103,15 +170,42 @@
       <button id="signout-btn" class="logout hidden" onclick="handleSignoutClick()">Cerrar Sesión</button>
     </div>
 
-    <!-- Calendar Data & Search Display -->
+    <!-- Calendar Data & Dashboard Display -->
     <div id="content" class="hidden">
       
+      <!-- Resumen de Ganancias en la Parte Superior -->
+      <div style="margin-top: 20px;">
+        <div class="dashboard-title">Resumen de Ganancias Estimadas</div>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-label">Esta Semana</div>
+            <div class="metric-value" id="stat-week">$0</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Este Mes</div>
+            <div class="metric-value" id="stat-month">$0</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Últimos 6 Meses</div>
+            <div class="metric-value" id="stat-6months">$0</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Este Año</div>
+            <div class="metric-value" id="stat-year">$0</div>
+          </div>
+          <div class="metric-card accent">
+            <div class="metric-label" id="stat-range-label">Total Rango Actual</div>
+            <div class="metric-value" id="stat-range-total">$0</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Panel de filtros / búsqueda -->
       <div class="filters">
         <div class="filter-group">
           <label for="search-type">Modo de consulta:</label>
           <select id="search-type" onchange="toggleFilterInputs()">
-            <option value="recent">Últimos / Próximos eventos</option>
+            <option value="recent">Próximos / Recientes</option>
             <option value="single-date">Fecha específica</option>
             <option value="date-range">Rango de fechas</option>
           </select>
@@ -121,9 +215,10 @@
         <div class="filter-group" id="limit-group">
           <label for="event-limit">Cantidad:</label>
           <select id="event-limit">
-            <option value="5">Últimos/Próximos 5</option>
-            <option value="10" selected>Últimos/Próximos 10</option>
-            <option value="100">Últimos/Próximos 100</option>
+            <option value="5">5 Trabajos</option>
+            <option value="10" selected>10 Trabajos</option>
+            <option value="100">100 Trabajos</option>
+            <option value="9999">Todos los trabajos</option>
           </select>
         </div>
 
@@ -143,49 +238,42 @@
           <input type="date" id="range-end-input" />
         </div>
 
-        <button onclick="fetchCalendarEvents()">Buscar</button>
+        <button onclick="fetchCalendarEvents()">Buscar / Actualizar</button>
       </div>
 
-      <h3>Eventos</h3>
+      <h3>Listado de Trabajos (<span id="event-count">0</span>)</h3>
       <ul id="events-list"></ul>
     </div>
   </div>
 
   <script>
-    // Configuration Settings
     const CLIENT_ID = '983452807710-uq9v1alecgh8tphop0s363kpbut9nltr.apps.googleusercontent.com';
     const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
-    
-    // ID del calendario personalizado solicitado
     const CALENDAR_ID = 'pajaresmartin070@gmail.com';
 
     let tokenClient;
     let accessToken = null;
 
-    // Initialize GIS Client once the page loads
     window.onload = function() {
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPES,
         callback: (tokenResponse) => {
           if (tokenResponse.error) {
-            console.error('Error during token retrieval:', tokenResponse);
+            console.error('Error durante la autenticación:', tokenResponse);
             return;
           }
           accessToken = tokenResponse.access_token;
           
-          // Update UI state
           document.getElementById('authorize-btn').classList.add('hidden');
           document.getElementById('signout-btn').classList.remove('hidden');
           document.getElementById('content').classList.remove('hidden');
 
-          // Fetch calendar events on initial login
           fetchCalendarEvents();
         },
       });
     };
 
-    // Trigger OAuth Authorization Flow
     function handleAuthClick() {
       if (!accessToken) {
         tokenClient.requestAccessToken({ prompt: 'consent' });
@@ -194,7 +282,6 @@
       }
     }
 
-    // Revoke token and reset UI
     function handleSignoutClick() {
       if (accessToken) {
         google.accounts.oauth2.revoke(accessToken, () => {
@@ -207,149 +294,219 @@
       }
     }
 
-    // Muestra u oculta los controles del formulario según la opción elegida
     function toggleFilterInputs() {
       const searchType = document.getElementById('search-type').value;
-      
       document.getElementById('limit-group').classList.toggle('hidden', searchType !== 'recent');
       document.getElementById('single-date-group').classList.toggle('hidden', searchType !== 'single-date');
       document.getElementById('range-start-group').classList.toggle('hidden', searchType !== 'date-range');
       document.getElementById('range-end-group').classList.toggle('hidden', searchType !== 'date-range');
     }
 
-// Consulta la API de Google Calendar obteniendo TODAS las páginas disponibles
-// Consulta la API de Google Calendar obteniendo TODAS las páginas disponibles
-async function fetchCalendarEvents() {
-  const eventsList = document.getElementById('events-list');
-  eventsList.innerHTML = 'Cargando y filtrando eventos...';
+    // Extrae el precio mayor ignorando teléfonos y verificando que tenga al menos 3 dígitos
+    function extractJobPrice(text) {
+      if (!text) return null;
 
-  const searchType = document.getElementById('search-type').value;
-  
-  // Base del endpoint solicitando el máximo permitido por página (250)
-  let baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?singleEvents=true&orderBy=startTime&maxResults=250`;
+      // 1. Reemplazar/Remover patrones de números telefónicos típicos
+      let cleanedText = text
+        .replace(/(\+?\d{1,3}[\s-]?)?\(?\d{2,4}\)?[\s-]?\d{3,4}[\s-]?\d{3,4}/g, ' ') // Formatos internacionales/locales
+        .replace(/\b09\d[\s-]?\d{3}[\s-]?\d{3}\b/g, ' ')                          // Móviles (ej: 099 123 456)
+        .replace(/\b2\d{3}[\s-]?\d{4}\b/g, ' ');                                  // Fijos (ej: 2400 1234)
 
-  let queryParams = '';
+      // 2. Buscar todos los números aislados de 3 o más dígitos
+      const numberMatches = cleanedText.match(/\b\d{3,}\b/g);
 
-  if (searchType === 'recent') {
-    const limit = document.getElementById('event-limit').value;
-    const now = new Date().toISOString();
-    queryParams += `&timeMin=${encodeURIComponent(now)}`;
-  } 
-  else if (searchType === 'single-date') {
-    const dateVal = document.getElementById('single-date-input').value;
-    if (!dateVal) {
-      eventsList.innerHTML = '<li>Por favor selecciona una fecha.</li>';
-      return;
-    }
-    const timeMin = new Date(`${dateVal}T00:00:00`).toISOString();
-    const timeMax = new Date(`${dateVal}T23:59:59`).toISOString();
-    queryParams += `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`;
-  } 
-  else if (searchType === 'date-range') {
-    const startVal = document.getElementById('range-start-input').value;
-    const endVal = document.getElementById('range-end-input').value;
+      if (!numberMatches) return null;
 
-    if (!startVal && !endVal) {
-      eventsList.innerHTML = '<li>Por favor selecciona al menos una fecha (desde o hasta).</li>';
-      return;
+      // 3. Convertir a entero y seleccionar el número MAYOR
+      const validPrices = numberMatches
+        .map(n => parseInt(n, 10))
+        .filter(n => !isNaN(n));
+
+      if (validPrices.length === 0) return null;
+
+      return Math.max(...validPrices);
     }
 
-    if (startVal) {
-      const timeMin = new Date(`${startVal}T00:00:00`).toISOString();
-      queryParams += `&timeMin=${encodeURIComponent(timeMin)}`;
-    }
-    if (endVal) {
-      const timeMax = new Date(`${endVal}T23:59:59`).toISOString();
-      queryParams += `&timeMax=${encodeURIComponent(timeMax)}`;
-    }
-  }
+    async function fetchCalendarEvents() {
+      const eventsList = document.getElementById('events-list');
+      eventsList.innerHTML = '<li>Cargando y procesando trabajos...</li>';
 
-  try {
-    let allEvents = [];
-    let pageToken = null;
+      const searchType = document.getElementById('search-type').value;
+      let baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?singleEvents=true&orderBy=startTime&maxResults=250`;
+      let queryParams = '';
 
-    // Bucle para recorrer todas las páginas y acumular todos los eventos
-    do {
-      let endpoint = baseUrl + queryParams;
-      if (pageToken) {
-        endpoint += `&pageToken=${encodeURIComponent(pageToken)}`;
+      if (searchType === 'recent') {
+        const now = new Date().toISOString();
+        queryParams += `&timeMin=${encodeURIComponent(now)}`;
+      } 
+      else if (searchType === 'single-date') {
+        const dateVal = document.getElementById('single-date-input').value;
+        if (!dateVal) {
+          eventsList.innerHTML = '<li>Por favor selecciona una fecha.</li>';
+          return;
+        }
+        const timeMin = new Date(`${dateVal}T00:00:00`).toISOString();
+        const timeMax = new Date(`${dateVal}T23:59:59`).toISOString();
+        queryParams += `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`;
+      } 
+      else if (searchType === 'date-range') {
+        const startVal = document.getElementById('range-start-input').value;
+        const endVal = document.getElementById('range-end-input').value;
+
+        if (!startVal && !endVal) {
+          eventsList.innerHTML = '<li>Por favor selecciona al menos una fecha (desde o hasta).</li>';
+          return;
+        }
+        if (startVal) {
+          const timeMin = new Date(`${startVal}T00:00:00`).toISOString();
+          queryParams += `&timeMin=${encodeURIComponent(timeMin)}`;
+        }
+        if (endVal) {
+          const timeMax = new Date(`${endVal}T23:59:59`).toISOString();
+          queryParams += `&timeMax=${encodeURIComponent(timeMax)}`;
+        }
       }
 
-      const response = await fetch(endpoint, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`
+      try {
+        let rawEvents = [];
+        let pageToken = null;
+
+        // Obtener todos los eventos paginados
+        do {
+          let endpoint = baseUrl + queryParams;
+          if (pageToken) {
+            endpoint += `&pageToken=${encodeURIComponent(pageToken)}`;
+          }
+
+          const response = await fetch(endpoint, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+
+          if (!response.ok) {
+            throw new Error(`Error API (${response.status}): ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          if (data.items) {
+            rawEvents = rawEvents.concat(data.items);
+          }
+          pageToken = data.nextPageToken;
+
+        } while (pageToken);
+
+        // Procesar y filtrar eventos
+        let processedJobs = [];
+
+        rawEvents.forEach(event => {
+          const title = event.summary || '';
+          const desc = event.description || '';
+          const fullContent = `${title}\n${desc}`.trim();
+
+          // REGLA 1: Descartar si el contenido tiene más de 300 caracteres
+          if (fullContent.length > 300) return;
+
+          // REGLA 2: Extraer el precio mayor ignorando teléfonos
+          const price = extractJobPrice(fullContent);
+
+          // REGLA 3: Conservar solo si tiene un precio válido (>= 100)
+          if (price !== null) {
+            processedJobs.push({
+              id: event.id,
+              summary: title || 'Trabajo sin título',
+              description: desc,
+              price: price,
+              startDate: new Date(event.start.dateTime || event.start.date),
+              endDate: event.end ? new Date(event.end.dateTime || event.end.date) : null
+            });
+          }
+        });
+
+        // Calcular Estadísticas para la barra superior
+        calculateDashboardMetrics(processedJobs);
+
+        // Aplicar límite si la consulta es "recientes"
+        let displayJobs = processedJobs;
+        if (searchType === 'recent') {
+          const limit = parseInt(document.getElementById('event-limit').value, 10);
+          displayJobs = processedJobs.slice(0, limit);
         }
+
+        // Renderizar lista en pantalla
+        document.getElementById('event-count').textContent = displayJobs.length;
+        eventsList.innerHTML = '';
+
+        if (displayJobs.length === 0) {
+          eventsList.innerHTML = '<li>No se encontraron eventos de trabajo que cumplan los criterios.</li>';
+          return;
+        }
+
+        displayJobs.forEach(job => {
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <div class="event-header">
+              <span class="event-title">${job.summary}</span>
+              <span class="event-price">$ ${job.price.toLocaleString()}</span>
+            </div>
+            <div class="event-time">
+              <strong>Fecha:</strong> ${job.startDate.toLocaleString()}
+              ${job.endDate ? ` | <strong>Hasta:</strong> ${job.endDate.toLocaleString()}` : ''}
+            </div>
+            ${job.description ? `<div class="event-desc">${job.description}</div>` : ''}
+          `;
+          eventsList.appendChild(li);
+        });
+
+      } catch (error) {
+        console.error('Error al obtener eventos:', error);
+        eventsList.innerHTML = `<li>Error al cargar eventos: ${error.message}</li>`;
+      }
+    }
+
+    // Calcula los totales por período (Semana, Mes, 6 Meses, Año, Total Rango)
+    function calculateDashboardMetrics(jobs) {
+      const now = new Date();
+      
+      // Inicio de la semana actual (Lunes)
+      const startOfWeek = new Date(now);
+      const day = startOfWeek.getDay() || 7;
+      startOfWeek.setDate(startOfWeek.getDate() - day + 1);
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      // Inicio del mes actual
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      // Hace 6 meses
+      const startOf6Months = new Date(now);
+      startOf6Months.setMonth(startOf6Months.getMonth() - 6);
+
+      // Inicio del año actual
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+      let weekTotal = 0;
+      let monthTotal = 0;
+      let sixMonthTotal = 0;
+      let yearTotal = 0;
+      let rangeTotal = 0;
+
+      jobs.forEach(job => {
+        const price = job.price;
+        const date = job.startDate;
+
+        rangeTotal += price;
+
+        if (date >= startOfWeek) weekTotal += price;
+        if (date >= startOfMonth) monthTotal += price;
+        if (date >= startOf6Months) sixMonthTotal += price;
+        if (date >= startOfYear) yearTotal += price;
       });
 
-      if (!response.ok) {
-        throw new Error(`Error API (${response.status}): ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      
-      if (data.items && data.items.length > 0) {
-        allEvents = allEvents.concat(data.items);
-      }
-
-      pageToken = data.nextPageToken;
-
-      if (pageToken) {
-        eventsList.innerHTML = `Cargando eventos... (${allEvents.length} recuperados hasta ahora)`;
-      }
-
-    } while (pageToken);
-
-    // Expressión regular para buscar números aislados de 3 o más dígitos (ej. 100, 900, 1200, 12000)
-    const priceRegex = /\b\d{3,}\b/g;
-
-    // FILTRO: Conservar solo los eventos que tengan un número de 3+ dígitos en el título o la descripción
-    const jobEvents = allEvents.filter(event => {
-      const textToSearch = `${event.summary || ''} ${event.description || ''}`;
-      return priceRegex.test(textToSearch);
-    });
-
-    // Si la opción seleccionada es "recientes", aplicar el límite al grupo ya filtrado
-    let finalEvents = jobEvents;
-    if (searchType === 'recent') {
-      const limit = parseInt(document.getElementById('event-limit').value, 10);
-      finalEvents = jobEvents.slice(0, limit);
+      // Actualizar UI
+      document.getElementById('stat-week').textContent = `$ ${weekTotal.toLocaleString()}`;
+      document.getElementById('stat-month').textContent = `$ ${monthTotal.toLocaleString()}`;
+      document.getElementById('stat-6months').textContent = `$ ${sixMonthTotal.toLocaleString()}`;
+      document.getElementById('stat-year').textContent = `$ ${yearTotal.toLocaleString()}`;
+      document.getElementById('stat-range-total').textContent = `$ ${rangeTotal.toLocaleString()}`;
     }
-
-    eventsList.innerHTML = '';
-    if (finalEvents.length === 0) {
-      eventsList.innerHTML = '<li>No se encontraron trabajos o eventos con precios registrados (números de 3 o más cifras).</li>';
-      return;
-    }
-
-    // Renderizar eventos filtrados
-    finalEvents.forEach(event => {
-      const start = event.start.dateTime || event.start.date;
-      const end = event.end ? (event.end.dateTime || event.end.date) : null;
-      
-      const textToSearch = `${event.summary || ''} ${event.description || ''}`;
-      // Extrae todos los precios/números encontrados para destacarlos
-      const foundPrices = textToSearch.match(/\b\d{3,}\b/g) || [];
-      
-      const li = document.createElement('li');
-      li.innerHTML = `
-        <strong>${event.summary || 'Sin título'}</strong> 
-        <span style="color: #28a745; font-weight: bold; margin-left: 10px;">
-          [Monto / Precio: $${foundPrices.join(', $')}]
-        </span><br/>
-        <span class="event-time">
-          <strong>Inicio:</strong> ${new Date(start).toLocaleString()} 
-          ${end ? `| <strong>Fin:</strong> ${new Date(end).toLocaleString()}` : ''}
-        </span>
-        ${event.description ? `<div class="event-desc">${event.description}</div>` : ''}
-      `;
-      eventsList.appendChild(li);
-    });
-
-  } catch (error) {
-    console.error('Error al obtener eventos:', error);
-    eventsList.innerHTML = `<li>Error al cargar eventos: ${error.message}</li>`;
-  }
-}
-    </script>
+  </script>
 </body>
 </html>
