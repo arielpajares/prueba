@@ -217,22 +217,22 @@
       document.getElementById('range-end-group').classList.toggle('hidden', searchType !== 'date-range');
     }
 
-    // Consulta la API de Google Calendar
-    // Consulta la API de Google Calendar
+// Consulta la API de Google Calendar obteniendo TODAS las páginas disponibles
 async function fetchCalendarEvents() {
   const eventsList = document.getElementById('events-list');
-  eventsList.innerHTML = 'Cargando eventos...';
+  eventsList.innerHTML = 'Cargando todos los eventos...';
 
   const searchType = document.getElementById('search-type').value;
   
-  // Base endpoint utilizando el ID del calendario especificado
-  let endpoint = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?singleEvents=true&orderBy=startTime`;
+  // Base del endpoint solicitando el máximo permitido por página (250)
+  let baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?singleEvents=true&orderBy=startTime&maxResults=250`;
+
+  let queryParams = '';
 
   if (searchType === 'recent') {
     const limit = document.getElementById('event-limit').value;
-    // CORRECCIÓN: Para ver eventos actuales/próximos, filtramos a partir de la fecha y hora actual
     const now = new Date().toISOString();
-    endpoint += `&timeMin=${encodeURIComponent(now)}&maxResults=${limit}`;
+    queryParams += `&timeMin=${encodeURIComponent(now)}`;
   } 
   else if (searchType === 'single-date') {
     const dateVal = document.getElementById('single-date-input').value;
@@ -242,7 +242,7 @@ async function fetchCalendarEvents() {
     }
     const timeMin = new Date(`${dateVal}T00:00:00`).toISOString();
     const timeMax = new Date(`${dateVal}T23:59:59`).toISOString();
-    endpoint += `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`;
+    queryParams += `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`;
   } 
   else if (searchType === 'date-range') {
     const startVal = document.getElementById('range-start-input').value;
@@ -253,38 +253,67 @@ async function fetchCalendarEvents() {
       return;
     }
 
-    // CORRECCIÓN: Permite enviar solo "Desde", solo "Hasta" o ambas fechas
     if (startVal) {
       const timeMin = new Date(`${startVal}T00:00:00`).toISOString();
-      endpoint += `&timeMin=${encodeURIComponent(timeMin)}`;
+      queryParams += `&timeMin=${encodeURIComponent(timeMin)}`;
     }
     if (endVal) {
       const timeMax = new Date(`${endVal}T23:59:59`).toISOString();
-      endpoint += `&timeMax=${encodeURIComponent(timeMax)}`;
+      queryParams += `&timeMax=${encodeURIComponent(timeMax)}`;
     }
   }
 
   try {
-    const response = await fetch(endpoint, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`
-      }
-    });
+    let allEvents = [];
+    let pageToken = null;
 
-    if (!response.ok) {
-      throw new Error(`Error API (${response.status}): ${response.statusText}`);
+    // Bucle para recorrer todas las páginas y acumular todos los eventos
+    do {
+      let endpoint = baseUrl + queryParams;
+      if (pageToken) {
+        endpoint += `&pageToken=${encodeURIComponent(pageToken)}`;
+      }
+
+      const response = await fetch(endpoint, {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error API (${response.status}): ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      
+      if (data.items && data.items.length > 0) {
+        allEvents = allEvents.concat(data.items);
+      }
+
+      // Se guarda el token de la siguiente página (si no hay más, será undefined)
+      pageToken = data.nextPageToken;
+
+      // Actualizar el estado en pantalla si hay muchas páginas
+      if (pageToken) {
+        eventsList.innerHTML = `Cargando eventos... (${allEvents.length} recuperados hasta ahora)`;
+      }
+
+    } while (pageToken); // Continúa mientras exista una página siguiente
+
+    // Si la opción seleccionada es "recientes", limitar el arreglo final según lo seleccionado
+    if (searchType === 'recent') {
+      const limit = parseInt(document.getElementById('event-limit').value, 10);
+      allEvents = allEvents.slice(0, limit);
     }
 
-    const data = await response.json();
-    const events = data.items;
-
     eventsList.innerHTML = '';
-    if (!events || events.length === 0) {
+    if (allEvents.length === 0) {
       eventsList.innerHTML = '<li>No se encontraron eventos para los criterios seleccionados.</li>';
       return;
     }
 
-    events.forEach(event => {
+    // Renderizar la lista completa de eventos recolectados
+    allEvents.forEach(event => {
       const start = event.start.dateTime || event.start.date;
       const end = event.end ? (event.end.dateTime || event.end.date) : null;
       
