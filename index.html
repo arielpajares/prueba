@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,7 +9,7 @@
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      max-width: 800px;
+      max-width: 850px;
       margin: 40px auto;
       padding: 0 20px;
       color: #333;
@@ -24,7 +24,7 @@
       background-color: #1a73e8;
       color: white;
       border: none;
-      padding: 10px 20px;
+      padding: 10px 18px;
       font-size: 14px;
       font-weight: 500;
       border-radius: 4px;
@@ -43,9 +43,36 @@
     .hidden {
       display: none;
     }
+    .filters {
+      margin-top: 20px;
+      padding: 16px;
+      background-color: #f8f9fa;
+      border-radius: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      align-items: flex-end;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .filter-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #555;
+    }
+    select, input[type="date"] {
+      padding: 8px 12px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 14px;
+    }
     ul {
       list-style-type: none;
       padding: 0;
+      margin-top: 20px;
     }
     li {
       padding: 12px;
@@ -58,6 +85,11 @@
       font-size: 12px;
       color: #666;
     }
+    .event-desc {
+      font-size: 13px;
+      color: #444;
+      margin-top: 4px;
+    }
   </style>
 </head>
 <body>
@@ -67,13 +99,54 @@
     
     <!-- Sign-In / Sign-Out Controls -->
     <div id="auth-section">
-      <button id="authorize-btn" onclick="handleAuthClick()">Connect Google Calendar</button>
-      <button id="signout-btn" class="logout hidden" onclick="handleSignoutClick()">Sign Out</button>
+      <button id="authorize-btn" onclick="handleAuthClick()">Conectar Google Calendar</button>
+      <button id="signout-btn" class="logout hidden" onclick="handleSignoutClick()">Cerrar Sesión</button>
     </div>
 
-    <!-- Calendar Data Display -->
+    <!-- Calendar Data & Search Display -->
     <div id="content" class="hidden">
-      <h3>Upcoming Events</h3>
+      
+      <!-- Panel de filtros / búsqueda -->
+      <div class="filters">
+        <div class="filter-group">
+          <label for="search-type">Modo de consulta:</label>
+          <select id="search-type" onchange="toggleFilterInputs()">
+            <option value="recent">Últimos / Próximos eventos</option>
+            <option value="single-date">Fecha específica</option>
+            <option value="date-range">Rango de fechas</option>
+          </select>
+        </div>
+
+        <!-- Opción 1: Cantidad de eventos -->
+        <div class="filter-group" id="limit-group">
+          <label for="event-limit">Cantidad:</label>
+          <select id="event-limit">
+            <option value="5">Últimos/Próximos 5</option>
+            <option value="10" selected>Últimos/Próximos 10</option>
+            <option value="100">Últimos/Próximos 100</option>
+          </select>
+        </div>
+
+        <!-- Opción 2: Fecha única -->
+        <div class="filter-group hidden" id="single-date-group">
+          <label for="single-date-input">Fecha:</label>
+          <input type="date" id="single-date-input" />
+        </div>
+
+        <!-- Opción 3: Rango de fechas -->
+        <div class="filter-group hidden" id="range-start-group">
+          <label for="range-start-input">Desde:</label>
+          <input type="date" id="range-start-input" />
+        </div>
+        <div class="filter-group hidden" id="range-end-group">
+          <label for="range-end-input">Hasta:</label>
+          <input type="date" id="range-end-input" />
+        </div>
+
+        <button onclick="fetchCalendarEvents()">Buscar</button>
+      </div>
+
+      <h3>Eventos</h3>
       <ul id="events-list"></ul>
     </div>
   </div>
@@ -82,6 +155,9 @@
     // Configuration Settings
     const CLIENT_ID = '983452807710-uq9v1alecgh8tphop0s363kpbut9nltr.apps.googleusercontent.com';
     const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
+    
+    // ID del calendario personalizado solicitado
+    const CALENDAR_ID = 'pajaresmartin070@gmail.com';
 
     let tokenClient;
     let accessToken = null;
@@ -103,7 +179,7 @@
           document.getElementById('signout-btn').classList.remove('hidden');
           document.getElementById('content').classList.remove('hidden');
 
-          // Fetch user calendar information
+          // Fetch calendar events on initial login
           fetchCalendarEvents();
         },
       });
@@ -112,7 +188,6 @@
     // Trigger OAuth Authorization Flow
     function handleAuthClick() {
       if (!accessToken) {
-        // Prompt user to grant permission
         tokenClient.requestAccessToken({ prompt: 'consent' });
       } else {
         tokenClient.requestAccessToken({ prompt: '' });
@@ -132,13 +207,53 @@
       }
     }
 
-    // Fetch primary calendar events using the OAuth Access Token
+    // Muestra u oculta los controles del formulario según la opción elegida
+    function toggleFilterInputs() {
+      const searchType = document.getElementById('search-type').value;
+      
+      document.getElementById('limit-group').classList.toggle('hidden', searchType !== 'recent');
+      document.getElementById('single-date-group').classList.toggle('hidden', searchType !== 'single-date');
+      document.getElementById('range-start-group').classList.toggle('hidden', searchType !== 'date-range');
+      document.getElementById('range-end-group').classList.toggle('hidden', searchType !== 'date-range');
+    }
+
+    // Consulta la API de Google Calendar
     async function fetchCalendarEvents() {
       const eventsList = document.getElementById('events-list');
-      eventsList.innerHTML = 'Loading events...';
+      eventsList.innerHTML = 'Cargando eventos...';
 
-      const now = new Date().toISOString();
-      const endpoint = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now)}&maxResults=10&orderBy=startTime&singleEvents=true`;
+      const searchType = document.getElementById('search-type').value;
+      
+      // Base endpoint utilizando el ID del calendario especificado
+      let endpoint = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?singleEvents=true&orderBy=startTime`;
+
+      if (searchType === 'recent') {
+        const limit = document.getElementById('event-limit').value;
+        endpoint += `&maxResults=${limit}`;
+      } 
+      else if (searchType === 'single-date') {
+        const dateVal = document.getElementById('single-date-input').value;
+        if (!dateVal) {
+          eventsList.innerHTML = '<li>Por favor selecciona una fecha.</li>';
+          return;
+        }
+        // Inicio y fin del día seleccionado en formato ISO
+        const timeMin = new Date(`${dateVal}T00:00:00`).toISOString();
+        const timeMax = new Date(`${dateVal}T23:59:59`).toISOString();
+        endpoint += `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`;
+      } 
+      else if (searchType === 'date-range') {
+        const startVal = document.getElementById('range-start-input').value;
+        const endVal = document.getElementById('range-end-input').value;
+
+        if (!startVal || !endVal) {
+          eventsList.innerHTML = '<li>Por favor selecciona ambas fechas (desde y hasta).</li>';
+          return;
+        }
+        const timeMin = new Date(`${startVal}T00:00:00`).toISOString();
+        const timeMax = new Date(`${endVal}T23:59:59`).toISOString();
+        endpoint += `&timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}`;
+      }
 
       try {
         const response = await fetch(endpoint, {
@@ -148,7 +263,7 @@
         });
 
         if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
+          throw new Error(`Error API (${response.status}): ${response.statusText}`);
         }
 
         const data = await response.json();
@@ -156,23 +271,29 @@
 
         eventsList.innerHTML = '';
         if (!events || events.length === 0) {
-          eventsList.innerHTML = '<li>No upcoming events found.</li>';
+          eventsList.innerHTML = '<li>No se encontraron eventos para los criterios seleccionados.</li>';
           return;
         }
 
         events.forEach(event => {
           const start = event.start.dateTime || event.start.date;
+          const end = event.end.dateTime || event.end.date;
+          
           const li = document.createElement('li');
           li.innerHTML = `
-            <strong>${event.summary || 'Untitled Event'}</strong><br/>
-            <span class="event-time">${new Date(start).toLocaleString()}</span>
+            <strong>${event.summary || 'Sin título'}</strong><br/>
+            <span class="event-time">
+              <strong>Inicio:</strong> ${new Date(start).toLocaleString()} 
+              ${event.end ? `| <strong>Fin:</strong> ${new Date(end).toLocaleString()}` : ''}
+            </span>
+            ${event.description ? `<div class="event-desc">${event.description}</div>` : ''}
           `;
           eventsList.appendChild(li);
         });
 
       } catch (error) {
-        console.error('Failed to fetch events:', error);
-        eventsList.innerHTML = `<li>Error fetching events: ${error.message}</li>`;
+        console.error('Error al obtener eventos:', error);
+        eventsList.innerHTML = `<li>Error al cargar eventos: ${error.message}</li>`;
       }
     }
   </script>
