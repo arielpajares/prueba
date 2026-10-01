@@ -48,11 +48,17 @@
     }
     
     /* Dashboard Metrics */
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
     .dashboard-title {
       font-size: 18px;
       font-weight: 700;
-      margin-bottom: 15px;
       color: #202124;
+      margin: 0;
     }
     .metrics-grid {
       display: grid;
@@ -175,7 +181,10 @@
       
       <!-- Resumen de Ganancias en la Parte Superior -->
       <div style="margin-top: 20px;">
-        <div class="dashboard-title">Resumen de Ganancias Estimadas</div>
+        <div class="dashboard-header">
+          <div class="dashboard-title">Resumen de Ganancias Generales</div>
+          <button onclick="loadGlobalDashboardMetrics()" style="font-size: 12px; padding: 6px 12px;">Recargar Estadísticas Globales</button>
+        </div>
         <div class="metrics-grid">
           <div class="metric-card">
             <div class="metric-label">Esta Semana</div>
@@ -194,7 +203,7 @@
             <div class="metric-value" id="stat-year">$0</div>
           </div>
           <div class="metric-card accent">
-            <div class="metric-label" id="stat-range-label">Total Rango Actual</div>
+            <div class="metric-label" id="stat-range-label">Total Búsqueda Actual</div>
             <div class="metric-value" id="stat-range-total">$0</div>
           </div>
         </div>
@@ -238,10 +247,10 @@
           <input type="date" id="range-end-input" />
         </div>
 
-        <button onclick="fetchCalendarEvents()">Buscar / Actualizar</button>
+        <button onclick="fetchCalendarEvents()">Buscar / Filtrar</button>
       </div>
 
-      <h3>Listado de Trabajos (<span id="event-count">0</span>)</h3>
+      <h3>Listado de Trabajos Encontrados (<span id="event-count">0</span>)</h3>
       <ul id="events-list"></ul>
     </div>
   </div>
@@ -269,6 +278,9 @@
           document.getElementById('signout-btn').classList.remove('hidden');
           document.getElementById('content').classList.remove('hidden');
 
+          // Cargar las estadísticas globales fijas primero
+          loadGlobalDashboardMetrics();
+          // Cargar el listado inicial según la búsqueda
           fetchCalendarEvents();
         },
       });
@@ -306,11 +318,11 @@
     function extractJobPrice(text) {
       if (!text) return null;
 
-      // 1. Reemplazar/Remover patrones de números telefónicos típicos
+      // 1. Remover patrones de números telefónicos típicos
       let cleanedText = text
-        .replace(/(\+?\d{1,3}[\s-]?)?\(?\d{2,4}\)?[\s-]?\d{3,4}[\s-]?\d{3,4}/g, ' ') // Formatos internacionales/locales
-        .replace(/\b09\d[\s-]?\d{3}[\s-]?\d{3}\b/g, ' ')                          // Móviles (ej: 099 123 456)
-        .replace(/\b2\d{3}[\s-]?\d{4}\b/g, ' ');                                  // Fijos (ej: 2400 1234)
+        .replace(/(\+?\d{1,3}[\s-]?)?\(?\d{2,4}\)?[\s-]?\d{3,4}[\s-]?\d{3,4}/g, ' ') 
+        .replace(/\b09\d[\s-]?\d{3}[\s-]?\d{3}\b/g, ' ')                          
+        .replace(/\b2\d{3}[\s-]?\d{4}\b/g, ' ');                                  
 
       // 2. Buscar todos los números aislados de 3 o más dígitos
       const numberMatches = cleanedText.match(/\b\d{3,}\b/g);
@@ -325,6 +337,99 @@
       if (validPrices.length === 0) return null;
 
       return Math.max(...validPrices);
+    }
+
+    // Carga los eventos del año actual para calcular estadísticas fijas e independientes
+    async function loadGlobalDashboardMetrics() {
+      document.getElementById('stat-week').textContent = '...';
+      document.getElementById('stat-month').textContent = '...';
+      document.getElementById('stat-6months').textContent = '...';
+      document.getElementById('stat-year').textContent = '...';
+
+      const now = new Date();
+      // Consultar desde el 1 de enero del año actual
+      const startOfYear = new Date(now.getFullYear(), 0, 1).toISOString();
+
+      let baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${encodeURIComponent(startOfYear)}`;
+      
+      try {
+        let globalEvents = [];
+        let pageToken = null;
+
+        do {
+          let endpoint = baseUrl;
+          if (pageToken) {
+            endpoint += `&pageToken=${encodeURIComponent(pageToken)}`;
+          }
+
+          const response = await fetch(endpoint, {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+
+          if (!response.ok) break;
+
+          const data = await response.json();
+          if (data.items) {
+            globalEvents = globalEvents.concat(data.items);
+          }
+          pageToken = data.nextPageToken;
+
+        } while (pageToken);
+
+        let globalJobs = [];
+
+        globalEvents.forEach(event => {
+          const title = event.summary || '';
+          const desc = event.description || '';
+          const fullContent = `${title}\n${desc}`.trim();
+
+          if (fullContent.length > 300) return;
+
+          const price = extractJobPrice(fullContent);
+
+          if (price !== null) {
+            globalJobs.push({
+              price: price,
+              startDate: new Date(event.start.dateTime || event.start.date)
+            });
+          }
+        });
+
+        // Calcular Estadísticas Fijas
+        const startOfWeek = new Date(now);
+        const day = startOfWeek.getDay() || 7;
+        startOfWeek.setDate(startOfWeek.getDate() - day + 1);
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+        const startOf6Months = new Date(now);
+        startOf6Months.setMonth(startOf6Months.getMonth() - 6);
+
+        let weekTotal = 0;
+        let monthTotal = 0;
+        let sixMonthTotal = 0;
+        let yearTotal = 0;
+
+        globalJobs.forEach(job => {
+          const price = job.price;
+          const date = job.startDate;
+
+          if (date >= startOfWeek) weekTotal += price;
+          if (date >= startOfMonth) monthTotal += price;
+          if (date >= startOf6Months) sixMonthTotal += price;
+          yearTotal += price; // Puesto que consultamos desde startOfYear
+        });
+
+        // Actualizar UI fija de métricas
+        document.getElementById('stat-week').textContent = `$ ${weekTotal.toLocaleString()}`;
+        document.getElementById('stat-month').textContent = `$ ${monthTotal.toLocaleString()}`;
+        document.getElementById('stat-6months').textContent = `$ ${sixMonthTotal.toLocaleString()}`;
+        document.getElementById('stat-year').textContent = `$ ${yearTotal.toLocaleString()}`;
+
+      } catch (error) {
+        console.error('Error calculando estadísticas fijas:', error);
+      }
     }
 
     async function fetchCalendarEvents() {
@@ -371,7 +476,7 @@
         let rawEvents = [];
         let pageToken = null;
 
-        // Obtener todos los eventos paginados
+        // Obtener todos los eventos paginados según la búsqueda
         do {
           let endpoint = baseUrl + queryParams;
           if (pageToken) {
@@ -408,7 +513,7 @@
           // REGLA 2: Extraer el precio mayor ignorando teléfonos
           const price = extractJobPrice(fullContent);
 
-          // REGLA 3: Conservar solo si tiene un precio válido (>= 100)
+          // REGLA 3: Conservar solo si tiene un precio válido
           if (price !== null) {
             processedJobs.push({
               id: event.id,
@@ -421,15 +526,16 @@
           }
         });
 
-        // Calcular Estadísticas para la barra superior
-        calculateDashboardMetrics(processedJobs);
-
         // Aplicar límite si la consulta es "recientes"
         let displayJobs = processedJobs;
         if (searchType === 'recent') {
           const limit = parseInt(document.getElementById('event-limit').value, 10);
           displayJobs = processedJobs.slice(0, limit);
         }
+
+        // Calcular el Total únicamente para los elementos filtrados en la búsqueda
+        let searchTotal = displayJobs.reduce((acc, job) => acc + job.price, 0);
+        document.getElementById('stat-range-total').textContent = `$ ${searchTotal.toLocaleString()}`;
 
         // Renderizar lista en pantalla
         document.getElementById('event-count').textContent = displayJobs.length;
@@ -460,52 +566,6 @@
         console.error('Error al obtener eventos:', error);
         eventsList.innerHTML = `<li>Error al cargar eventos: ${error.message}</li>`;
       }
-    }
-
-    // Calcula los totales por período (Semana, Mes, 6 Meses, Año, Total Rango)
-    function calculateDashboardMetrics(jobs) {
-      const now = new Date();
-      
-      // Inicio de la semana actual (Lunes)
-      const startOfWeek = new Date(now);
-      const day = startOfWeek.getDay() || 7;
-      startOfWeek.setDate(startOfWeek.getDate() - day + 1);
-      startOfWeek.setHours(0, 0, 0, 0);
-
-      // Inicio del mes actual
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      // Hace 6 meses
-      const startOf6Months = new Date(now);
-      startOf6Months.setMonth(startOf6Months.getMonth() - 6);
-
-      // Inicio del año actual
-      const startOfYear = new Date(now.getFullYear(), 0, 1);
-
-      let weekTotal = 0;
-      let monthTotal = 0;
-      let sixMonthTotal = 0;
-      let yearTotal = 0;
-      let rangeTotal = 0;
-
-      jobs.forEach(job => {
-        const price = job.price;
-        const date = job.startDate;
-
-        rangeTotal += price;
-
-        if (date >= startOfWeek) weekTotal += price;
-        if (date >= startOfMonth) monthTotal += price;
-        if (date >= startOf6Months) sixMonthTotal += price;
-        if (date >= startOfYear) yearTotal += price;
-      });
-
-      // Actualizar UI
-      document.getElementById('stat-week').textContent = `$ ${weekTotal.toLocaleString()}`;
-      document.getElementById('stat-month').textContent = `$ ${monthTotal.toLocaleString()}`;
-      document.getElementById('stat-6months').textContent = `$ ${sixMonthTotal.toLocaleString()}`;
-      document.getElementById('stat-year').textContent = `$ ${yearTotal.toLocaleString()}`;
-      document.getElementById('stat-range-total').textContent = `$ ${rangeTotal.toLocaleString()}`;
     }
   </script>
 </body>
