@@ -218,9 +218,10 @@
     }
 
 // Consulta la API de Google Calendar obteniendo TODAS las páginas disponibles
+// Consulta la API de Google Calendar obteniendo TODAS las páginas disponibles
 async function fetchCalendarEvents() {
   const eventsList = document.getElementById('events-list');
-  eventsList.innerHTML = 'Cargando todos los eventos...';
+  eventsList.innerHTML = 'Cargando y filtrando eventos...';
 
   const searchType = document.getElementById('search-type').value;
   
@@ -290,36 +291,51 @@ async function fetchCalendarEvents() {
         allEvents = allEvents.concat(data.items);
       }
 
-      // Se guarda el token de la siguiente página (si no hay más, será undefined)
       pageToken = data.nextPageToken;
 
-      // Actualizar el estado en pantalla si hay muchas páginas
       if (pageToken) {
         eventsList.innerHTML = `Cargando eventos... (${allEvents.length} recuperados hasta ahora)`;
       }
 
-    } while (pageToken); // Continúa mientras exista una página siguiente
+    } while (pageToken);
 
-    // Si la opción seleccionada es "recientes", limitar el arreglo final según lo seleccionado
+    // Expressión regular para buscar números aislados de 3 o más dígitos (ej. 100, 900, 1200, 12000)
+    const priceRegex = /\b\d{3,}\b/g;
+
+    // FILTRO: Conservar solo los eventos que tengan un número de 3+ dígitos en el título o la descripción
+    const jobEvents = allEvents.filter(event => {
+      const textToSearch = `${event.summary || ''} ${event.description || ''}`;
+      return priceRegex.test(textToSearch);
+    });
+
+    // Si la opción seleccionada es "recientes", aplicar el límite al grupo ya filtrado
+    let finalEvents = jobEvents;
     if (searchType === 'recent') {
       const limit = parseInt(document.getElementById('event-limit').value, 10);
-      allEvents = allEvents.slice(0, limit);
+      finalEvents = jobEvents.slice(0, limit);
     }
 
     eventsList.innerHTML = '';
-    if (allEvents.length === 0) {
-      eventsList.innerHTML = '<li>No se encontraron eventos para los criterios seleccionados.</li>';
+    if (finalEvents.length === 0) {
+      eventsList.innerHTML = '<li>No se encontraron trabajos o eventos con precios registrados (números de 3 o más cifras).</li>';
       return;
     }
 
-    // Renderizar la lista completa de eventos recolectados
-    allEvents.forEach(event => {
+    // Renderizar eventos filtrados
+    finalEvents.forEach(event => {
       const start = event.start.dateTime || event.start.date;
       const end = event.end ? (event.end.dateTime || event.end.date) : null;
       
+      const textToSearch = `${event.summary || ''} ${event.description || ''}`;
+      // Extrae todos los precios/números encontrados para destacarlos
+      const foundPrices = textToSearch.match(/\b\d{3,}\b/g) || [];
+      
       const li = document.createElement('li');
       li.innerHTML = `
-        <strong>${event.summary || 'Sin título'}</strong><br/>
+        <strong>${event.summary || 'Sin título'}</strong> 
+        <span style="color: #28a745; font-weight: bold; margin-left: 10px;">
+          [Monto / Precio: $${foundPrices.join(', $')}]
+        </span><br/>
         <span class="event-time">
           <strong>Inicio:</strong> ${new Date(start).toLocaleString()} 
           ${end ? `| <strong>Fin:</strong> ${new Date(end).toLocaleString()}` : ''}
