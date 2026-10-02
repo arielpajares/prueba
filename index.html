@@ -165,12 +165,27 @@
       padding: 0;
       margin-top: 15px;
     }
-    li {
+    li.job-card {
       padding: 16px;
       border: 1px solid #eee;
       border-radius: 6px;
       margin-bottom: 10px;
       background: #fff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    li.job-card:hover {
+      border-color: #1a73e8;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+      transform: translateY(-1px);
+    }
+    .open-calendar-hint {
+      font-size: 11px;
+      color: #1a73e8;
+      font-weight: 600;
+      margin-top: 8px;
+      display: inline-block;
     }
     .event-header {
       display: flex;
@@ -312,7 +327,6 @@
     let tokenClient;
     let accessToken = null;
 
-    // Almacenamiento global de trabajos procesados para filtrado dinámico
     let globalJobsStore = [];
     let currentSearchJobsStore = [];
 
@@ -385,6 +399,13 @@
       return Math.max(...validPrices);
     }
 
+    function openGoogleCalendarEvent(eventId) {
+      if (!eventId) return;
+      // Genera la URL directa al evento de Google Calendar
+      const url = `https://calendar.google.com/calendar/r/eventedit/${eventId}`;
+      window.open(url, '_blank');
+    }
+
     async function loadGlobalDashboardMetrics() {
       document.getElementById('stat-week').textContent = '...';
       document.getElementById('stat-month').textContent = '...';
@@ -443,7 +464,6 @@
           }
         });
 
-        // Calcular Estadísticas Fijas
         const startOfWeek = new Date(now);
         const day = startOfWeek.getDay() || 7;
         startOfWeek.setDate(startOfWeek.getDate() - day + 1);
@@ -654,6 +674,10 @@
 
       jobs.forEach(job => {
         const li = document.createElement('li');
+        li.className = 'job-card';
+        // Evento click/touch para abrir el evento en Google Calendar
+        li.onclick = () => openGoogleCalendarEvent(job.id);
+
         li.innerHTML = `
           <div class="event-header">
             <span class="event-title">${job.summary}</span>
@@ -664,6 +688,7 @@
             ${job.endDate ? ` | <strong>Hasta:</strong> ${job.endDate.toLocaleString()}` : ''}
           </div>
           ${job.description ? `<div class="event-desc">${job.description}</div>` : ''}
+          <div class="open-calendar-hint">📅 Toca para abrir en Google Calendar ➔</div>
         `;
         eventsList.appendChild(li);
       });
