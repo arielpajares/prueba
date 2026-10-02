@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Google Calendar OAuth Viewer - Dashboard de Trabajos</title>
-  <!-- Load Google Identity Services library -->
+  <!-- Google Identity Services library -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
     body {
@@ -323,6 +323,7 @@
     const CLIENT_ID = '983452807710-uq9v1alecgh8tphop0s363kpbut9nltr.apps.googleusercontent.com';
     const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
     const CALENDAR_ID = 'pajaresmartin070@gmail.com';
+    const STORAGE_KEY = 'gcal_access_token_data';
 
     let tokenClient;
     let accessToken = null;
@@ -331,6 +332,7 @@
     let currentSearchJobsStore = [];
 
     window.onload = function() {
+      // Inicializar cliente OAuth
       tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: CLIENT_ID,
         scope: SCOPES,
@@ -341,15 +343,48 @@
           }
           accessToken = tokenResponse.access_token;
           
-          document.getElementById('authorize-btn').classList.add('hidden');
-          document.getElementById('signout-btn').classList.remove('hidden');
-          document.getElementById('content').classList.remove('hidden');
+          // Guardar en localStorage por 55 minutos (3300000 ms)
+          const expireTime = new Date().getTime() + 3300000;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            token: accessToken,
+            expiry: expireTime
+          }));
 
-          loadGlobalDashboardMetrics();
-          fetchCalendarEvents();
+          initUIAndLoadData();
         },
       });
+
+      // Intentar restaurar sesión activa desde localStorage
+      checkSavedSession();
     };
+
+    function checkSavedSession() {
+      const savedDataStr = localStorage.getItem(STORAGE_KEY);
+      if (savedDataStr) {
+        try {
+          const data = JSON.parse(savedDataStr);
+          const now = new Date().getTime();
+          if (now < data.expiry) {
+            accessToken = data.token;
+            initUIAndLoadData();
+            return;
+          } else {
+            localStorage.removeItem(STORAGE_KEY);
+          }
+        } catch(e) {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    }
+
+    function initUIAndLoadData() {
+      document.getElementById('authorize-btn').classList.add('hidden');
+      document.getElementById('signout-btn').classList.remove('hidden');
+      document.getElementById('content').classList.remove('hidden');
+
+      loadGlobalDashboardMetrics();
+      fetchCalendarEvents();
+    }
 
     function handleAuthClick() {
       if (!accessToken) {
@@ -360,6 +395,7 @@
     }
 
     function handleSignoutClick() {
+      localStorage.removeItem(STORAGE_KEY);
       if (accessToken) {
         google.accounts.oauth2.revoke(accessToken, () => {
           accessToken = null;
@@ -368,6 +404,10 @@
           document.getElementById('content').classList.add('hidden');
           document.getElementById('events-list').innerHTML = '';
         });
+      } else {
+        document.getElementById('authorize-btn').classList.remove('hidden');
+        document.getElementById('signout-btn').classList.add('hidden');
+        document.getElementById('content').classList.add('hidden');
       }
     }
 
@@ -399,10 +439,22 @@
       return Math.max(...validPrices);
     }
 
+    // Solución al Error 500: Codificación Base64 correcta del eventId y calendarId
     function openGoogleCalendarEvent(eventId) {
       if (!eventId) return;
-      // Genera la URL directa al evento de Google Calendar
-      const url = `https://calendar.google.com/calendar/r/eventedit/${eventId}`;
+
+      let cleanEventId = eventId.split('@')[0];
+      let cleanCalId = CALENDAR_ID;
+
+      if (cleanCalId.endsWith('@group.calendar.google.com')) {
+        cleanCalId = cleanCalId.replace('@group.calendar.google.com', '@g');
+      }
+
+      // Concatenar ID + Espacio + Correo y pasar a Base64 sin padding '='
+      const rawString = `${cleanEventId} ${cleanCalId}`;
+      const base64Eid = btoa(rawString).replace(/=/g, '');
+
+      const url = `https://calendar.google.com/calendar/r/eventedit/${base64Eid}`;
       window.open(url, '_blank');
     }
 
@@ -431,7 +483,10 @@
             headers: { 'Authorization': `Bearer ${accessToken}` }
           });
 
-          if (!response.ok) break;
+          if (!response.ok) {
+            if (response.status === 401) handleSignoutClick();
+            break;
+          }
 
           const data = await response.json();
           if (data.items) {
@@ -554,6 +609,7 @@
           });
 
           if (!response.ok) {
+            if (response.status === 401) handleSignoutClick();
             throw new Error(`Error API (${response.status}): ${response.statusText}`);
           }
 
