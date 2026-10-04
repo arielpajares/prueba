@@ -333,6 +333,897 @@
           <input type="date" id="range-end-input" onchange="markCustomSelection()" />
         </div>
 
+        <button onclick="fetchCalendarEvents()">Buscar por Fechas</button>
+
+        <div style="width: 100%; border-top: 1px solid #e0e0e0; margin: 4px 0;"></div>
+
+        <!-- Dynamic Instant Filters (In-Memory) -->
+        <div class="filter-group" id="expense-category-group">
+          <label for="expense-category">Categoría (Gastos):</label>
+          <select id="expense-category" onchange="applyFiltersAndRender()">
+            <option value="ALL">Todas las Categorías</option>
+            <option value="4">🦩 Flamenco - Supermercado</option>
+            <option value="5">🌻 Girasol - Inversión</option>
+            <option value="6">🍊 Mandarina - Empresa</option>
+            <option value="OTHER">Otros / Sin Categoría</option>
+          </select>
+        </div>
+
+        <div class="filter-group">
+          <label for="min-val">Monto Mínimo ($):</label>
+          <input type="number" id="min-val" placeholder="0" style="width: 90px;" oninput="applyFiltersAndRender()" />
+        </div>
+        <div class="filter-group">
+          <label for="max-val">Monto Máximo ($):</label>
+          <input type="number" id="max-val" placeholder="Sin límite" style="width: 100px;" oninput="applyFiltersAndRender()" />
+        </div>
+
+        <div class="filter-group" id="limit-group">
+          <label for="event-limit">Mostrar máximo:</label>
+          <select id="event-limit" onchange="applyFiltersAndRender()">
+            <option value="20">20 Registros</option>
+            <option value="50" selected>50 Registros</option>
+            <option value="100">100 Registros</option>
+            <option value="9999">Todos</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Banner Informativo -->
+      <div class="active-view-banner" id="active-view-banner">
+        <span id="banner-text">Mostrando resultados...</span>
+      </div>
+
+      <h3>Listado de Registros (<span id="event-count">0</span>)</h3>
+      <ul id="events-list"></ul>
+
+    </div>
+  </div>
+
+  <script>
+    const CLIENT_ID = '983452807710-uq9v1alecgh8tphop0s363kpbut9nltr.apps.googleusercontent.com';
+    const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
+    const STORAGE_KEY = 'gcal_access_token_data';
+
+    // Calendar IDs
+    const CALENDAR_VENTAS = 'pajaresmartin070@gmail.com';
+    const CALENDAR_GASTOS = '65a0ee4f7b806b099ac98bdb0df66f999416d45a9e7a246f6fc3cd00a4d0725a@group.calendar.google.com';
+
+    // Expense Colors Config
+    const GASTO_CATEGORIAS = {
+      '4': { nombre: 'Supermercado', colorName: 'Flamenco', hex: '#E67C73' },
+      '5': { nombre: 'Inversión', colorName: 'Girasol', hex: '#F6BF26' },
+      '6': { nombre: 'Empresa', colorName: 'Mandarina', hex: '#F4511E' }
+    };
+
+    let tokenClient;
+    let accessToken = null;
+
+    // State Management
+    let currentCategory = 'ventas'; // 'ventas' | 'gastos' | 'ganancias'
+    let globalVentasStore = [];
+    let globalGastosStore = [];
+
+    // Loaded events cache for current search window
+    let fetchedVentas = [];
+    let fetchedGastos = [];
+    
+    let activePreset = 'month';
+
+    window.onload = function() {
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: CLIENT_ID,
+        scope: SCOPES,
+        callback: (tokenResponse) => {
+          if (tokenResponse.error) {
+            console.error('Error de autenticación:', tokenResponse);
+            return;
+          }
+          accessToken = tokenResponse.access_token;
+          
+          const expireTime = new Date().getTime() + 3300000;
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            token: accessToken,
+            expiry: expireTime
+          }));
+
+          initUI();
+        },
+      });
+
+      checkSavedSession();
+    };
+
+    function checkSavedSession() {
+      const savedDataStr = localStorage.getItem(STORAGE_KEY);
+      if (savedDataStr) {
+        try {
+          const data = JSON.parse(savedDataStr);
+          if (new Date().getTime() < data.expiry) {
+            accessToken = data.token;
+            initUI();
+            return;
+          } else {
+            localStorage.removeItem(STORAGE_KEY);
+          }
+        } catch(e) {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+      }
+    }
+
+    function initUI() {
+      document.getElementById('authorize-btn').classList.add('hidden');
+      document.getElementById('signout-btn').classList.remove('hidden');
+      document.getElementById('content').classList.remove('hidden');
+
+      switchCategory('ventas');
+      loadAllMetricsAndData();
+    }
+
+    function handleAuthClick() {
+      if (!accessToken) {
+        tokenClient.requestAccessToken({ prompt: 'consent' });
+      } else {
+        tokenClient.requestAccessToken({ prompt: '' });
+      }
+    }
+
+    function handleSignoutClick() {
+      localStorage.removeItem(STORAGE_KEY);
+      if (accessToken) {
+        google.accounts.oauth2.revoke(accessToken, () => {
+          accessToken = null;
+          document.getElementById('authorize-btn').classList.remove('hidden');
+          document.getElementById('signout-btn').classList.add('hidden');
+          document.getElementById('content').classList.add('hidden');
+        });
+      } else {
+        document.getElementById('authorize-btn').classList.remove('hidden');
+        document.getElementById('signout-btn').classList.add('hidden');
+        document.getElementById('content').classList.add('hidden');
+      }
+    }
+
+    function formatDateToInput(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function switchCategory(cat) {
+      currentCategory = cat;
+
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active', 'tab-gastos', 'tab-ganancias'));
+      const activeTab = document.getElementById(`tab-${cat}`);
+      activeTab.classList.add('active');
+      if (cat === 'gastos') activeTab.classList.add('tab-gastos');
+      if (cat === 'ganancias') activeTab.classList.add('tab-ganancias');
+
+      const metricsGrid = document.getElementById('metrics-grid');
+      metricsGrid.className = 'metrics-grid';
+      if (cat === 'gastos') metricsGrid.classList.add('mode-gastos');
+      if (cat === 'ganancias') metricsGrid.classList.add('mode-ganancias');
+
+      const expenseFilterGrp = document.getElementById('expense-category-group');
+      if (cat === 'gastos') {
+        expenseFilterGrp.classList.remove('hidden');
+      } else {
+        expenseFilterGrp.classList.add('hidden');
+      }
+
+      const titles = {
+        'ventas': 'Resumen de Ventas',
+        'gastos': 'Resumen de Gastos',
+        'ganancias': 'Resumen de Ganancias Netas (Ventas - Gastos)'
+      };
+      document.getElementById('metrics-title').textContent = titles[cat];
+
+      updateMetricsDisplay();
+      fetchCalendarEvents();
+    }
+
+    function selectPresetMetric(preset) {
+      activePreset = preset;
+      const now = new Date();
+      let startDate = new Date();
+      let endDate = new Date();
+
+      if (preset === 'week') {
+        const day = startDate.getDay() || 7;
+        startDate.setDate(startDate.getDate() - day + 1);
+        endDate.setDate(startDate.getDate() + 6);
+      } else if (preset === 'month') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      } else if (preset === '6months') {
+        startDate.setMonth(startDate.getMonth() - 6);
+      } else if (preset === 'year') {
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = new Date(now.getFullYear(), 11, 31);
+      }
+
+      if (preset !== 'custom') {
+        document.getElementById('range-start-input').value = formatDateToInput(startDate);
+        document.getElementById('range-end-input').value = formatDateToInput(endDate);
+      }
+
+      updateActiveCardStyle();
+      fetchCalendarEvents();
+    }
+
+    function markCustomSelection() {
+      activePreset = 'custom';
+      updateActiveCardStyle();
+    }
+
+    function updateActiveCardStyle() {
+      document.querySelectorAll('.metric-card').forEach(card => card.classList.remove('active'));
+      const cardId = activePreset === 'custom' ? 'card-custom' : `card-${activePreset}`;
+      const card = document.getElementById(cardId);
+      if (card) card.classList.add('active');
+    }
+
+    function extractPrice(text) {
+      if (!text) return null;
+      let cleanedText = text
+        .replace(/(\+?\d{1,3}[\s-]?)?\(?\d{2,4}\)?[\s-]?\d{3,4}[\s-]?\d{3,4}/g, ' ') 
+        .replace(/\b09\d[\s-]?\d{3}[\s-]?\d{3}\b/g, ' ')                          
+        .replace(/\b2\d{3}[\s-]?\d{4}\b/g, ' ');                                  
+
+      const numberMatches = cleanedText.match(/\b\d{3,}\b/g);
+      if (!numberMatches) return null;
+
+      const validPrices = numberMatches.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
+      return validPrices.length > 0 ? Math.max(...validPrices) : null;
+    }
+
+    function openCalendarEvent(eventId, calId) {
+      if (!eventId) return;
+      let cleanEventId = eventId.split('@')[0];
+      let cleanCalId = calId;
+      if (cleanCalId.endsWith('@group.calendar.google.com')) {
+        cleanCalId = cleanCalId.replace('@group.calendar.google.com', '@g');
+      }
+      const rawString = `${cleanEventId} ${cleanCalId}`;
+      const base64Eid = btoa(rawString).replace(/=/g, '');
+      window.open(`https://calendar.google.com/calendar/r/eventedit/${base64Eid}`, '_blank');
+    }
+
+    async function loadAllMetricsAndData() {
+      const now = new Date();
+      const startOfYear = new Date(now.getFullYear(), 0, 1).toISOString();
+
+      try {
+        const [ventas, gastos] = await Promise.all([
+          fetchCalendarRaw(CALENDAR_VENTAS, startOfYear),
+          fetchCalendarRaw(CALENDAR_GASTOS, startOfYear)
+        ]);
+
+        globalVentasStore = ventas;
+        globalGastosStore = gastos;
+
+        updateMetricsDisplay();
+        selectPresetMetric('month');
+      } catch (err) {
+        console.error('Error cargando métricas globales:', err);
+      }
+    }
+
+    async function fetchCalendarRaw(calId, timeMin) {
+      let baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${encodeURIComponent(timeMin)}`;
+      let rawEvents = [];
+      let pageToken = null;
+
+      do {
+        let endpoint = baseUrl;
+        if (pageToken) endpoint += `&pageToken=${encodeURIComponent(pageToken)}`;
+
+        const response = await fetch(endpoint, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) handleSignoutClick();
+          break;
+        }
+
+        const data = await response.json();
+        if (data.items) rawEvents = rawEvents.concat(data.items);
+        pageToken = data.nextPageToken;
+      } while (pageToken);
+
+      let processed = [];
+      rawEvents.forEach(event => {
+        const title = event.summary || '';
+        const desc = event.description || '';
+        const fullContent = `${title}\n${desc}`.trim();
+        if (fullContent.length > 300) return;
+
+        const price = extractPrice(fullContent);
+        if (price !== null) {
+          processed.push({
+            id: event.id,
+            calendarId: calId,
+            summary: title || 'Registro sin título',
+            description: desc,
+            price: price,
+            colorId: event.colorId || 'default',
+            type: calId === CALENDAR_VENTAS ? 'venta' : 'gasto',
+            startDate: new Date(event.start.dateTime || event.start.date),
+            endDate: event.end ? new Date(event.end.dateTime || event.end.date) : null
+          });
+        }
+      });
+      return processed;
+    }
+
+    function calculateStoreTotals(store) {
+      const now = new Date();
+      const startOfWeek = new Date(now);
+      const day = startOfWeek.getDay() || 7;
+      startOfWeek.setDate(startOfWeek.getDate() - day + 1);
+      startOfWeek.setHours(0, 0, 0, 0);
+
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const startOf6Months = new Date(now);
+      startOf6Months.setMonth(startOf6Months.getMonth() - 6);
+      const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+      let totals = { week: 0, month: 0, sixMonths: 0, year: 0 };
+
+      store.forEach(item => {
+        const p = item.price;
+        const d = item.startDate;
+        if (d >= startOfWeek) totals.week += p;
+        if (d >= startOfMonth) totals.month += p;
+        if (d >= startOf6Months) totals.sixMonths += p;
+        if (d >= startOfYear) totals.year += p;
+      });
+
+      return totals;
+    }
+
+    function updateMetricsDisplay() {
+      const vTotals = calculateStoreTotals(globalVentasStore);
+      const gTotals = calculateStoreTotals(globalGastosStore);
+
+      let res = { week: 0, month: 0, sixMonths: 0, year: 0 };
+
+      if (currentCategory === 'ventas') {
+        res = vTotals;
+      } else if (currentCategory === 'gastos') {
+        res = gTotals;
+      } else if (currentCategory === 'ganancias') {
+        res.week = vTotals.week - gTotals.week;
+        res.month = vTotals.month - gTotals.month;
+        res.sixMonths = vTotals.sixMonths - gTotals.sixMonths;
+        res.year = vTotals.year - gTotals.year;
+      }
+
+      document.getElementById('stat-week').textContent = `$ ${res.week.toLocaleString()}`;
+      document.getElementById('stat-month').textContent = `$ ${res.month.toLocaleString()}`;
+      document.getElementById('stat-6months').textContent = `$ ${res.sixMonths.toLocaleString()}`;
+      document.getElementById('stat-year').textContent = `$ ${res.year.toLocaleString()}`;
+    }
+
+    async function fetchCalendarEvents() {
+      const eventsList = document.getElementById('events-list');
+      eventsList.innerHTML = '<li>Cargando registros...</li>';
+
+      const startVal = document.getElementById('range-start-input').value;
+      const endVal = document.getElementById('range-end-input').value;
+
+      let queryParams = '';
+      if (startVal) {
+        queryParams += `&timeMin=${encodeURIComponent(new Date(`${startVal}T00:00:00`).toISOString())}`;
+      }
+      if (endVal) {
+        queryParams += `&timeMax=${encodeURIComponent(new Date(`${endVal}T23:59:59`).toISOString())}`;
+      }
+
+      try {
+        if (currentCategory === 'ventas') {
+          fetchedVentas = await fetchCalendarRawParams(CALENDAR_VENTAS, queryParams);
+          fetchedGastos = [];
+        } else if (currentCategory === 'gastos') {
+          fetchedVentas = [];
+          fetchedGastos = await fetchCalendarRawParams(CALENDAR_GASTOS, queryParams);
+        } else {
+          [fetchedVentas, fetchedGastos] = await Promise.all([
+            fetchCalendarRawParams(CALENDAR_VENTAS, queryParams),
+            fetchCalendarRawParams(CALENDAR_GASTOS, queryParams)
+          ]);
+        }
+
+        applyFiltersAndRender();
+
+      } catch (error) {
+        console.error(error);
+        eventsList.innerHTML = `<li>Error al cargar eventos: ${error.message}</li>`;
+      }
+    }
+
+    async function fetchCalendarRawParams(calId, queryParams) {
+      let baseUrl = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?singleEvents=true&orderBy=startTime&maxResults=250` + queryParams;
+      let rawEvents = [];
+      let pageToken = null;
+
+      do {
+        let endpoint = baseUrl;
+        if (pageToken) endpoint += `&pageToken=${encodeURIComponent(pageToken)}`;
+
+        const response = await fetch(endpoint, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+
+        if (!response.ok) break;
+
+        const data = await response.json();
+        if (data.items) rawEvents = rawEvents.concat(data.items);
+        pageToken = data.nextPageToken;
+      } while (pageToken);
+
+      let processed = [];
+      rawEvents.forEach(event => {
+        const title = event.summary || '';
+        const desc = event.description || '';
+        const fullContent = `${title}\n${desc}`.trim();
+        if (fullContent.length > 300) return;
+
+        const price = extractPrice(fullContent);
+        if (price !== null) {
+          processed.push({
+            id: event.id,
+            calendarId: calId,
+            summary: title || 'Registro sin título',
+            description: desc,
+            price: price,
+            colorId: event.colorId || 'default',
+            type: calId === CALENDAR_VENTAS ? 'venta' : 'gasto',
+            startDate: new Date(event.start.dateTime || event.start.date),
+            endDate: event.end ? new Date(event.end.dateTime || event.end.date) : null
+          });
+        }
+      });
+
+      return processed;
+    }
+
+    // Instant In-Memory Filter Execution
+    function applyFiltersAndRender() {
+      const selectedExpenseCat = document.getElementById('expense-category').value;
+      const minVal = parseFloat(document.getElementById('min-val').value) || 0;
+      const maxVal = parseFloat(document.getElementById('max-val').value) || Infinity;
+      const limit = parseInt(document.getElementById('event-limit').value, 10);
+
+      const filterFn = (item) => {
+        if (item.price < minVal || item.price > maxVal) return false;
+
+        if (item.type === 'gasto' && selectedExpenseCat !== 'ALL') {
+          if (selectedExpenseCat === 'OTHER') {
+            if (['4', '5', '6'].includes(item.colorId)) return false;
+          } else if (item.colorId !== selectedExpenseCat) {
+            return false;
+          }
+        }
+        return true;
+      };
+
+      const filteredVentas = fetchedVentas.filter(filterFn);
+      const filteredGastos = fetchedGastos.filter(filterFn);
+
+      let combined = [];
+      if (currentCategory === 'ventas') combined = filteredVentas;
+      else if (currentCategory === 'gastos') combined = filteredGastos;
+      else combined = [...filteredVentas, ...filteredGastos].sort((a,b) => a.startDate - b.startDate);
+
+      // Total Búsqueda Activa
+      let searchVentas = filteredVentas.reduce((a,b) => a + b.price, 0);
+      let searchGastos = filteredGastos.reduce((a,b) => a + b.price, 0);
+
+      let totalVal = 0;
+      if (currentCategory === 'ventas') totalVal = searchVentas;
+      else if (currentCategory === 'gastos') totalVal = searchGastos;
+      else totalVal = searchVentas - searchGastos;
+
+      document.getElementById('stat-search-total').textContent = `$ ${totalVal.toLocaleString()}`;
+
+      let bannerMessage = `Mostrando resultados filtrados`;
+      const startVal = document.getElementById('range-start-input').value;
+      const endVal = document.getElementById('range-end-input').value;
+
+      if (startVal || endVal) {
+        bannerMessage += ` (${startVal || 'Inicio'} al ${endVal || 'Actualidad'})`;
+      }
+
+      document.getElementById('banner-text').textContent = bannerMessage;
+      
+      // Aplicar límite al renderizado
+      renderItemsList(combined.slice(0, limit));
+    }
+
+    function renderItemsList(items) {
+      const eventsList = document.getElementById('events-list');
+      document.getElementById('event-count').textContent = items.length;
+      eventsList.innerHTML = '';
+
+      if (items.length === 0) {
+        eventsList.innerHTML = '<li>No se encontraron registros para los filtros seleccionados.</li>';
+        return;
+      }
+
+      items.forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'item-card';
+        li.onclick = () => openCalendarEvent(item.id, item.calendarId);
+
+        const isVenta = item.type === 'venta' || item.calendarId === CALENDAR_VENTAS;
+        const badgeClass = isVenta ? 'badge-venta' : 'badge-gasto';
+        const sign = isVenta ? '+' : '-';
+
+        let tagHtml = '';
+        if (!isVenta && GASTO_CATEGORIAS[item.colorId]) {
+          const catInfo = GASTO_CATEGORIAS[item.colorId];
+          tagHtml = `<div class="item-tag" style="background-color: ${catInfo.hex};">
+            ${catInfo.colorName} - ${catInfo.nombre}
+          </div>`;
+        }
+
+        li.innerHTML = `
+          <div class="item-header">
+            <span class="item-title">${item.summary}</span>
+            <span class="item-badge ${badgeClass}">${sign} $ ${item.price.toLocaleString()}</span>
+          </div>
+          <div class="item-time">
+            <strong>Fecha:</strong> ${item.startDate.toLocaleString()}
+            ${item.endDate ? ` | <strong>Hasta:</strong> ${item.endDate.toLocaleString()}` : ''}
+          </div>
+          ${tagHtml}
+          ${item.description ? `<div class="item-desc">${item.description}</div>` : ''}
+          <div class="open-calendar-hint">📅 Toca para abrir en Google Calendar ➔</div>
+        `;
+        eventsList.appendChild(li);
+      });
+    }
+  </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard Financiero - Ventas, Gastos y Ganancias</title>
+  <!-- Google Identity Services library -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      max-width: 1000px;
+      margin: 20px auto;
+      padding: 0 15px;
+      color: #333;
+      background-color: #f4f6f8;
+    }
+    .card {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+      margin-bottom: 20px;
+    }
+    button {
+      background-color: #1a73e8;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    button:hover {
+      background-color: #1557b0;
+    }
+    button.logout {
+      background-color: #dc3545;
+    }
+    button.logout:hover {
+      background-color: #bd2130;
+    }
+    .hidden {
+      display: none !important;
+    }
+    
+    /* SPA Navigation Tabs */
+    .spa-nav {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e0e0e0;
+      padding-bottom: 10px;
+    }
+    .nav-tab {
+      padding: 10px 20px;
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: 8px;
+      background: #e9ecef;
+      color: #495057;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .nav-tab:hover {
+      background: #dee2e6;
+    }
+    .nav-tab.active {
+      background-color: #1a73e8;
+      color: #fff;
+    }
+    .nav-tab.active.tab-gastos {
+      background-color: #dc3545;
+    }
+    .nav-tab.active.tab-ganancias {
+      background-color: #28a745;
+    }
+
+    /* Metrics Grid */
+    .dashboard-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .dashboard-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #202124;
+    }
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .metric-card {
+      background: #f8f9fa;
+      border: 1px solid #e9ecef;
+      border-left: 5px solid #1a73e8;
+      padding: 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+    .metric-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+    }
+    .metric-card.active {
+      box-shadow: 0 0 0 2px #1a73e8;
+      background-color: #e8f0fe;
+    }
+    .metric-label {
+      font-size: 11px;
+      color: #6c757d;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .metric-value {
+      font-size: 20px;
+      font-weight: 800;
+      color: #1a73e8;
+      margin-top: 6px;
+    }
+    
+    /* Mode-specific Metric Colors */
+    .mode-gastos .metric-card {
+      border-left-color: #dc3545;
+    }
+    .mode-gastos .metric-value {
+      color: #dc3545;
+    }
+    .mode-gastos .metric-card.active {
+      background-color: #f8d7da;
+      box-shadow: 0 0 0 2px #dc3545;
+    }
+
+    .mode-ganancias .metric-card {
+      border-left-color: #28a745;
+    }
+    .mode-ganancias .metric-value {
+      color: #28a745;
+    }
+    .mode-ganancias .metric-card.active {
+      background-color: #d4edda;
+      box-shadow: 0 0 0 2px #28a745;
+    }
+
+    /* Filters Section */
+    .filters {
+      padding: 18px;
+      background-color: #f8f9fa;
+      border-radius: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+      margin-bottom: 20px;
+      border: 1px solid #e0e0e0;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .filter-group label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #495057;
+    }
+    select, input[type="date"], input[type="number"] {
+      padding: 8px 10px;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      font-size: 13px;
+      background-color: #fff;
+    }
+
+    /* Lists and Cards */
+    .active-view-banner {
+      background-color: #e8f0fe;
+      border: 1px solid #d2e3fc;
+      color: #174ea6;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 15px;
+    }
+    ul {
+      list-style-type: none;
+      padding: 0;
+      margin-top: 15px;
+    }
+    li.item-card {
+      padding: 16px;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      background: #fff;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+    li.item-card:hover {
+      border-color: #1a73e8;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+      transform: translateY(-1px);
+    }
+    .item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .item-title {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .item-badge {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-weight: 800;
+      font-size: 14px;
+    }
+    .badge-venta {
+      background-color: #e6f4ea;
+      color: #137333;
+    }
+    .badge-gasto {
+      background-color: #fce8e6;
+      color: #c5221f;
+    }
+    .item-tag {
+      display: inline-flex;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-top: 5px;
+      color: #fff;
+    }
+    .item-time {
+      font-size: 12px;
+      color: #666;
+    }
+    .item-desc {
+      font-size: 13px;
+      color: #444;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #f0f0f0;
+      white-space: pre-wrap;
+    }
+    .open-calendar-hint {
+      font-size: 11px;
+      color: #1a73e8;
+      font-weight: 600;
+      margin-top: 8px;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Dashboard Financiero Personal</h2>
+    
+    <!-- Auth Section -->
+    <div id="auth-section">
+      <button id="authorize-btn" onclick="handleAuthClick()">Conectar con Google Calendar</button>
+      <button id="signout-btn" class="logout hidden" onclick="handleSignoutClick()">Cerrar Sesión</button>
+    </div>
+
+    <!-- Main Content App -->
+    <div id="content" class="hidden">
+      
+      <!-- SPA Navigation Bar -->
+      <div class="spa-nav">
+        <button class="nav-tab active" id="tab-ventas" onclick="switchCategory('ventas')">💰 Ventas</button>
+        <button class="nav-tab" id="tab-gastos" onclick="switchCategory('gastos')">💸 Gastos</button>
+        <button class="nav-tab" id="tab-ganancias" onclick="switchCategory('ganancias')">📊 Ganancias Netas</button>
+      </div>
+
+      <!-- General Statistics Section -->
+      <div id="dashboard-container">
+        <div class="dashboard-header">
+          <div class="dashboard-title" id="metrics-title">Resumen de Ventas</div>
+          <button onclick="loadAllMetricsAndData()" style="font-size: 12px; padding: 6px 12px;">Recargar Estadísticas</button>
+        </div>
+        
+        <div class="metrics-grid" id="metrics-grid">
+          <div class="metric-card" id="card-week" onclick="selectPresetMetric('week')">
+            <div class="metric-label">Esta Semana</div>
+            <div class="metric-value" id="stat-week">$0</div>
+          </div>
+          <div class="metric-card" id="card-month" onclick="selectPresetMetric('month')">
+            <div class="metric-label">Este Mes</div>
+            <div class="metric-value" id="stat-month">$0</div>
+          </div>
+          <div class="metric-card" id="card-6months" onclick="selectPresetMetric('6months')">
+            <div class="metric-label">Últimos 6 Meses</div>
+            <div class="metric-value" id="stat-6months">$0</div>
+          </div>
+          <div class="metric-card" id="card-year" onclick="selectPresetMetric('year')">
+            <div class="metric-label">Este Año</div>
+            <div class="metric-value" id="stat-year">$0</div>
+          </div>
+          <div class="metric-card active" id="card-custom" onclick="selectPresetMetric('custom')">
+            <div class="metric-label">Selección Actual</div>
+            <div class="metric-value" id="stat-search-total">$0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters Section -->
+      <div class="filters">
+        <div class="filter-group">
+          <label for="range-start-input">Desde:</label>
+          <input type="date" id="range-start-input" onchange="markCustomSelection()" />
+        </div>
+        
+        <div class="filter-group">
+          <label for="range-end-input">Hasta:</label>
+          <input type="date" id="range-end-input" onchange="markCustomSelection()" />
+        </div>
+
         <div class="filter-group" id="limit-group">
           <label for="event-limit">Límite de registros:</label>
           <select id="event-limit">
