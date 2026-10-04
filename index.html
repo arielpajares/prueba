@@ -182,13 +182,6 @@
       font-size: 13px;
       background-color: #fff;
     }
-    .color-dot {
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      margin-right: 5px;
-    }
 
     /* Lists and Cards */
     .active-view-banner {
@@ -305,24 +298,24 @@
         </div>
         
         <div class="metrics-grid" id="metrics-grid">
-          <div class="metric-card" id="card-week" onclick="filterByMetric('week')">
+          <div class="metric-card" id="card-week" onclick="selectPresetMetric('week')">
             <div class="metric-label">Esta Semana</div>
             <div class="metric-value" id="stat-week">$0</div>
           </div>
-          <div class="metric-card" id="card-month" onclick="filterByMetric('month')">
+          <div class="metric-card" id="card-month" onclick="selectPresetMetric('month')">
             <div class="metric-label">Este Mes</div>
             <div class="metric-value" id="stat-month">$0</div>
           </div>
-          <div class="metric-card" id="card-6months" onclick="filterByMetric('6months')">
+          <div class="metric-card" id="card-6months" onclick="selectPresetMetric('6months')">
             <div class="metric-label">Últimos 6 Meses</div>
             <div class="metric-value" id="stat-6months">$0</div>
           </div>
-          <div class="metric-card" id="card-year" onclick="filterByMetric('year')">
+          <div class="metric-card" id="card-year" onclick="selectPresetMetric('year')">
             <div class="metric-label">Este Año</div>
             <div class="metric-value" id="stat-year">$0</div>
           </div>
-          <div class="metric-card active" id="card-search" onclick="filterByMetric('search')">
-            <div class="metric-label">Total Búsqueda Actual</div>
+          <div class="metric-card active" id="card-custom" onclick="selectPresetMetric('custom')">
+            <div class="metric-label">Selección Actual</div>
             <div class="metric-value" id="stat-search-total">$0</div>
           </div>
         </div>
@@ -331,47 +324,34 @@
       <!-- Filters Section -->
       <div class="filters">
         <div class="filter-group">
-          <label for="search-type">Modo de fecha:</label>
-          <select id="search-type" onchange="toggleFilterInputs()">
-            <option value="recent">Próximos / Recientes</option>
-            <option value="single-date">Fecha específica</option>
-            <option value="date-range">Rango de fechas</option>
-          </select>
+          <label for="range-start-input">Desde:</label>
+          <input type="date" id="range-start-input" onchange="markCustomSelection()" />
+        </div>
+        
+        <div class="filter-group">
+          <label for="range-end-input">Hasta:</label>
+          <input type="date" id="range-end-input" onchange="markCustomSelection()" />
         </div>
 
         <div class="filter-group" id="limit-group">
-          <label for="event-limit">Cantidad:</label>
+          <label for="event-limit">Límite de registros:</label>
           <select id="event-limit">
-            <option value="10" selected>10 Registros</option>
-            <option value="50">50 Registros</option>
+            <option value="20">20 Registros</option>
+            <option value="50" selected>50 Registros</option>
             <option value="100">100 Registros</option>
             <option value="9999">Todos</option>
           </select>
         </div>
 
-        <div class="filter-group hidden" id="single-date-group">
-          <label for="single-date-input">Fecha:</label>
-          <input type="date" id="single-date-input" />
-        </div>
-
-        <div class="filter-group hidden" id="range-start-group">
-          <label for="range-start-input">Desde:</label>
-          <input type="date" id="range-start-input" />
-        </div>
-        <div class="filter-group hidden" id="range-end-group">
-          <label for="range-end-input">Hasta:</label>
-          <input type="date" id="range-end-input" />
-        </div>
-
         <!-- Filter by Expense Category / Color -->
         <div class="filter-group" id="expense-category-group">
-          <label for="expense-category">Categoría / Color (Gastos):</label>
+          <label for="expense-category">Categoría (Gastos):</label>
           <select id="expense-category">
             <option value="ALL">Todas las Categorías</option>
             <option value="4">🦩 Flamenco - Supermercado</option>
             <option value="5">🌻 Girasol - Inversión</option>
             <option value="6">🍊 Mandarina - Empresa</option>
-            <option value="OTHER">Otros / Sin Color</option>
+            <option value="OTHER">Otros / Sin Categoría</option>
           </select>
         </div>
 
@@ -385,7 +365,7 @@
           <input type="number" id="max-val" placeholder="Sin límite" style="width: 100px;" />
         </div>
 
-        <button onclick="fetchCalendarEvents()">Filtrar Lista</button>
+        <button onclick="fetchCalendarEvents()">Aplicar Filtros</button>
       </div>
 
       <!-- Banner Informativo -->
@@ -423,8 +403,7 @@
     let globalVentasStore = [];
     let globalGastosStore = [];
     
-    let currentSearchVentasStore = [];
-    let currentSearchGastosStore = [];
+    let activePreset = 'month'; // Default active preset
 
     window.onload = function() {
       tokenClient = google.accounts.oauth2.initTokenClient({
@@ -502,6 +481,14 @@
       }
     }
 
+    // Helper to format Date to YYYY-MM-DD
+    function formatDateToInput(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
     // SPA Navigation
     function switchCategory(cat) {
       currentCategory = cat;
@@ -539,12 +526,46 @@
       fetchCalendarEvents();
     }
 
-    function toggleFilterInputs() {
-      const searchType = document.getElementById('search-type').value;
-      document.getElementById('limit-group').classList.toggle('hidden', searchType !== 'recent');
-      document.getElementById('single-date-group').classList.toggle('hidden', searchType !== 'single-date');
-      document.getElementById('range-start-group').classList.toggle('hidden', searchType !== 'date-range');
-      document.getElementById('range-end-group').classList.toggle('hidden', searchType !== 'date-range');
+    // Select preset and populate inputs automatically
+    function selectPresetMetric(preset) {
+      activePreset = preset;
+      const now = new Date();
+      let startDate = new Date();
+      let endDate = new Date();
+
+      if (preset === 'week') {
+        const day = startDate.getDay() || 7;
+        startDate.setDate(startDate.getDate() - day + 1);
+        endDate.setDate(startDate.getDate() + 6);
+      } else if (preset === 'month') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      } else if (preset === '6months') {
+        startDate.setMonth(startDate.getMonth() - 6);
+      } else if (preset === 'year') {
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = new Date(now.getFullYear(), 11, 31);
+      }
+
+      if (preset !== 'custom') {
+        document.getElementById('range-start-input').value = formatDateToInput(startDate);
+        document.getElementById('range-end-input').value = formatDateToInput(endDate);
+      }
+
+      updateActiveCardStyle();
+      fetchCalendarEvents();
+    }
+
+    function markCustomSelection() {
+      activePreset = 'custom';
+      updateActiveCardStyle();
+    }
+
+    function updateActiveCardStyle() {
+      document.querySelectorAll('.metric-card').forEach(card => card.classList.remove('active'));
+      const cardId = activePreset === 'custom' ? 'card-custom' : `card-${activePreset}`;
+      const card = document.getElementById(cardId);
+      if (card) card.classList.add('active');
     }
 
     function extractPrice(text) {
@@ -588,6 +609,7 @@
         globalGastosStore = gastos;
 
         updateMetricsDisplay();
+        selectPresetMetric('month'); // Cargar por defecto 'Este Mes'
       } catch (err) {
         console.error('Error cargando métricas globales:', err);
       }
@@ -632,6 +654,7 @@
             description: desc,
             price: price,
             colorId: event.colorId || 'default',
+            type: calId === CALENDAR_VENTAS ? 'venta' : 'gasto',
             startDate: new Date(event.start.dateTime || event.start.date),
             endDate: event.end ? new Date(event.end.dateTime || event.end.date) : null
           });
@@ -693,45 +716,33 @@
       const eventsList = document.getElementById('events-list');
       eventsList.innerHTML = '<li>Cargando registros...</li>';
 
-      const searchType = document.getElementById('search-type').value;
-      let queryParams = '';
+      const startVal = document.getElementById('range-start-input').value;
+      const endVal = document.getElementById('range-end-input').value;
 
-      if (searchType === 'recent') {
-        const now = new Date().toISOString();
-        queryParams += `&timeMin=${encodeURIComponent(now)}`;
-      } else if (searchType === 'single-date') {
-        const dateVal = document.getElementById('single-date-input').value;
-        if (!dateVal) {
-          eventsList.innerHTML = '<li>Por favor selecciona una fecha.</li>';
-          return;
-        }
-        queryParams += `&timeMin=${encodeURIComponent(new Date(`${dateVal}T00:00:00`).toISOString())}&timeMax=${encodeURIComponent(new Date(`${dateVal}T23:59:59`).toISOString())}`;
-      } else if (searchType === 'date-range') {
-        const startVal = document.getElementById('range-start-input').value;
-        const endVal = document.getElementById('range-end-input').value;
-        if (startVal) queryParams += `&timeMin=${encodeURIComponent(new Date(`${startVal}T00:00:00`).toISOString())}`;
-        if (endVal) queryParams += `&timeMax=${encodeURIComponent(new Date(`${endVal}T23:59:59`).toISOString())}`;
+      let queryParams = '';
+      if (startVal) {
+        queryParams += `&timeMin=${encodeURIComponent(new Date(`${startVal}T00:00:00`).toISOString())}`;
+      }
+      if (endVal) {
+        queryParams += `&timeMax=${encodeURIComponent(new Date(`${endVal}T23:59:59`).toISOString())}`;
       }
 
       try {
+        let vList = [];
+        let gList = [];
+
         if (currentCategory === 'ventas') {
-          currentSearchVentasStore = await fetchCalendarRawParams(CALENDAR_VENTAS, queryParams);
-          currentSearchGastosStore = [];
+          vList = await fetchCalendarRawParams(CALENDAR_VENTAS, queryParams);
         } else if (currentCategory === 'gastos') {
-          currentSearchGastosStore = await fetchCalendarRawParams(CALENDAR_GASTOS, queryParams);
-          currentSearchVentasStore = [];
+          gList = await fetchCalendarRawParams(CALENDAR_GASTOS, queryParams);
         } else {
-          // Ganancias: Cargar ambos calendarios
-          const [v, g] = await Promise.all([
+          [vList, gList] = await Promise.all([
             fetchCalendarRawParams(CALENDAR_VENTAS, queryParams),
             fetchCalendarRawParams(CALENDAR_GASTOS, queryParams)
           ]);
-          currentSearchVentasStore = v;
-          currentSearchGastosStore = g;
         }
 
-        // Aplicar filtros de precio y categoría
-        applyFiltersAndRender();
+        applyFiltersAndRender(vList, gList);
 
       } catch (error) {
         console.error(error);
@@ -782,15 +793,11 @@
         }
       });
 
-      const searchType = document.getElementById('search-type').value;
-      if (searchType === 'recent') {
-        const limit = parseInt(document.getElementById('event-limit').value, 10);
-        return processed.slice(0, limit);
-      }
-      return processed;
+      const limit = parseInt(document.getElementById('event-limit').value, 10);
+      return processed.slice(0, limit);
     }
 
-    function applyFiltersAndRender() {
+    function applyFiltersAndRender(vList, gList) {
       const selectedExpenseCat = document.getElementById('expense-category').value;
       const minVal = parseFloat(document.getElementById('min-val').value) || 0;
       const maxVal = parseFloat(document.getElementById('max-val').value) || Infinity;
@@ -810,8 +817,8 @@
         return true;
       };
 
-      const filteredVentas = currentSearchVentasStore.filter(filterFn);
-      const filteredGastos = currentSearchGastosStore.filter(filterFn);
+      const filteredVentas = vList.filter(filterFn);
+      const filteredGastos = gList.filter(filterFn);
 
       let combined = [];
       if (currentCategory === 'ventas') combined = filteredVentas;
@@ -828,56 +835,17 @@
       else totalVal = searchVentas - searchGastos;
 
       document.getElementById('stat-search-total').textContent = `$ ${totalVal.toLocaleString()}`;
-      filterByMetric('search', combined);
-    }
 
-    function filterByMetric(metricKey, passedItems = null) {
-      document.querySelectorAll('.metric-card').forEach(card => card.classList.remove('active'));
+      let bannerMessage = `Mostrando resultados filtrados`;
+      const startVal = document.getElementById('range-start-input').value;
+      const endVal = document.getElementById('range-end-input').value;
 
-      let itemsToDisplay = [];
-      let bannerMessage = '';
-      const now = new Date();
-
-      if (metricKey === 'search') {
-        document.getElementById('card-search').classList.add('active');
-        itemsToDisplay = passedItems || [];
-        bannerMessage = `Mostrando resultados según los filtros seleccionados`;
-      } else {
-        document.getElementById(`card-${metricKey}`).classList.add('active');
-        
-        let startFilterDate = new Date(now);
-        if (metricKey === 'week') {
-          const day = startFilterDate.getDay() || 7;
-          startFilterDate.setDate(startFilterDate.getDate() - day + 1);
-          startFilterDate.setHours(0, 0, 0, 0);
-          bannerMessage = 'Filtrando registros de Esta Semana';
-        } else if (metricKey === 'month') {
-          startFilterDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          bannerMessage = 'Filtrando registros de Este Mes';
-        } else if (metricKey === '6months') {
-          startFilterDate.setMonth(startFilterDate.getMonth() - 6);
-          bannerMessage = 'Filtrando registros de los Últimos 6 Meses';
-        } else if (metricKey === 'year') {
-          startFilterDate = new Date(now.getFullYear(), 0, 1);
-          bannerMessage = 'Filtrando registros de Este Año';
-        }
-
-        const filterDateFn = item => item.startDate >= startFilterDate;
-
-        if (currentCategory === 'ventas') {
-          itemsToDisplay = globalVentasStore.filter(filterDateFn);
-        } else if (currentCategory === 'gastos') {
-          itemsToDisplay = globalGastosStore.filter(filterDateFn);
-        } else {
-          itemsToDisplay = [
-            ...globalVentasStore.filter(filterDateFn),
-            ...globalGastosStore.filter(filterDateFn)
-          ].sort((a,b) => a.startDate - b.startDate);
-        }
+      if (startVal || endVal) {
+        bannerMessage += ` (${startVal || 'Inicio'} al ${endVal || 'Actualidad'})`;
       }
 
       document.getElementById('banner-text').textContent = bannerMessage;
-      renderItemsList(itemsToDisplay);
+      renderItemsList(combined);
     }
 
     function renderItemsList(items) {
@@ -886,7 +854,7 @@
       eventsList.innerHTML = '';
 
       if (items.length === 0) {
-        eventsList.innerHTML = '<li>No se encontraron registros para la categoría o filtro seleccionado.</li>';
+        eventsList.innerHTML = '<li>No se encontraron registros para los filtros seleccionados.</li>';
         return;
       }
 
