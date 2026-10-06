@@ -224,6 +224,33 @@
       min-height: 42px;
     }
 
+    /* Multi-select Checkbox Container */
+    .checkbox-group-container {
+      background: #fff;
+      border: 1px solid #ced4da;
+      border-radius: 6px;
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+    }
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+    }
+    .checkbox-item input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      min-height: auto;
+      cursor: pointer;
+    }
+
     /* Lists and Cards */
     .active-view-banner {
       background-color: #e8f0fe;
@@ -314,7 +341,6 @@
 </head>
 <body>
 
-  <!-- Única tarjeta contenedor principal -->
   <div class="card">
     <h2>Dashboard Financiero Personal</h2>
     
@@ -330,7 +356,7 @@
       <!-- SPA Navigation Bar -->
       <div class="spa-nav">
         <button class="nav-tab active" id="tab-ventas" onclick="switchCategory('ventas')">💰 Ventas</button>
-        <button class="nav-tab" id="tab-gastos" onclick="switchCategory('gastos')">💸 Gastos</button>
+        <button class="nav-tab" id="tab-gastos" onclick="switchCategory('gastos')">💸 Gastos Empresa</button>
         <button class="nav-tab" id="tab-ganancias" onclick="switchCategory('ganancias')">📊 Ganancias Netas</button>
       </div>
 
@@ -381,16 +407,27 @@
 
         <div style="width: 100%; border-top: 1px solid #e0e0e0; margin: 4px 0;"></div>
 
-        <!-- Dynamic Instant Filters (In-Memory) -->
-        <div class="filter-group" id="expense-category-group">
-          <label for="expense-category">Categoría (Gastos):</label>
-          <select id="expense-category" onchange="applyFiltersAndRender()">
-            <option value="ALL">Todas las Categorías</option>
-            <option value="4">🦩 Flamenco - Supermercado</option>
-            <option value="5">🌻 Girasol - Inversión</option>
-            <option value="6">🍊 Mandarina - Empresa</option>
-            <option value="OTHER">Otros / Sin Categoría</option>
-          </select>
+        <!-- Multi-Select Category Checkboxes for Expenses -->
+        <div class="filter-group" id="expense-category-group" style="width: 100%;">
+          <label>Filtrar Categorías de Gastos (Empresa):</label>
+          <div class="checkbox-group-container">
+            <label class="checkbox-item">
+              <input type="checkbox" value="3" checked onchange="applyFiltersAndRender()" />
+              🍇 Uva - Sueldos
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" value="5" checked onchange="applyFiltersAndRender()" />
+              🌻 Girasol - Inversión
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" value="6" checked onchange="applyFiltersAndRender()" />
+              🍊 Mandarina - Empresa
+            </label>
+            <label class="checkbox-item">
+              <input type="checkbox" value="OTHER" onchange="applyFiltersAndRender()" />
+              ⚪ Otros / Sin Categoría
+            </label>
+          </div>
         </div>
 
         <div class="filter-group">
@@ -433,9 +470,9 @@
     const CALENDAR_VENTAS = 'pajaresmartin070@gmail.com';
     const CALENDAR_GASTOS = '65a0ee4f7b806b099ac98bdb0df66f999416d45a9e7a246f6fc3cd00a4d0725a@group.calendar.google.com';
 
-    // Expense Colors Config
+    // Expense Colors Config for Empresa
     const GASTO_CATEGORIAS = {
-      '4': { nombre: 'Supermercado', colorName: 'Flamenco', hex: '#E67C73' },
+      '3': { nombre: 'Sueldos', colorName: 'Uva', hex: '#8E24AA' },
       '5': { nombre: 'Inversión', colorName: 'Girasol', hex: '#F6BF26' },
       '6': { nombre: 'Empresa', colorName: 'Mandarina', hex: '#F4511E' }
     };
@@ -558,8 +595,8 @@
 
       const titles = {
         'ventas': 'Resumen de Ventas',
-        'gastos': 'Resumen de Gastos',
-        'ganancias': 'Resumen de Ganancias Netas (Ventas - Gastos)'
+        'gastos': 'Resumen de Gastos de Empresa',
+        'ganancias': 'Resumen de Ganancias Netas (Ventas - Gastos Empresa)'
       };
       document.getElementById('metrics-title').textContent = titles[cat];
 
@@ -645,7 +682,8 @@
         ]);
 
         globalVentasStore = ventas;
-        globalGastosStore = gastos;
+        // Filtrar gastos globales únicamente a los de Empresa (colorId 3, 5, 6)
+        globalGastosStore = gastos.filter(g => ['3', '5', '6'].includes(g.colorId));
 
         updateMetricsDisplay();
         selectPresetMetric('month');
@@ -835,7 +873,10 @@
     }
 
     function applyFiltersAndRender() {
-      const selectedExpenseCat = document.getElementById('expense-category').value;
+      // Obtener arreglo de colores seleccionados en las casillas
+      const selectedBoxes = Array.from(document.querySelectorAll('#expense-category-group input[type="checkbox"]:checked'))
+        .map(cb => cb.value);
+
       const minVal = parseFloat(document.getElementById('min-val').value) || 0;
       const maxVal = parseFloat(document.getElementById('max-val').value) || Infinity;
       const limit = parseInt(document.getElementById('event-limit').value, 10);
@@ -843,12 +884,15 @@
       const filterFn = (item) => {
         if (item.price < minVal || item.price > maxVal) return false;
 
-        if (item.type === 'gasto' && selectedExpenseCat !== 'ALL') {
-          if (selectedExpenseCat === 'OTHER') {
-            if (['4', '5', '6'].includes(item.colorId)) return false;
-          } else if (item.colorId !== selectedExpenseCat) {
-            return false;
+        // Filtrado dinámico multiselección de categorías para Gastos
+        if (item.type === 'gasto') {
+          if (selectedBoxes.includes('OTHER') && !['3', '5', '6'].includes(item.colorId)) {
+            return true;
           }
+          if (selectedBoxes.includes(item.colorId)) {
+            return true;
+          }
+          return false;
         }
         return true;
       };
