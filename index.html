@@ -442,10 +442,10 @@
         <div class="filter-group" id="limit-group">
           <label for="event-limit">Mostrar máximo:</label>
           <select id="event-limit" onchange="applyFiltersAndRender()">
+            <option value="9999" selected>Todos los registros</option>
             <option value="20">20 Registros</option>
-            <option value="50" selected>50 Registros</option>
+            <option value="50">50 Registros</option>
             <option value="100">100 Registros</option>
-            <option value="9999">Todos</option>
           </select>
         </div>
       </div>
@@ -682,7 +682,6 @@
         ]);
 
         globalVentasStore = ventas;
-        // Filtrar gastos globales únicamente a los de Empresa (colorId 3, 5, 6)
         globalGastosStore = gastos.filter(g => ['3', '5', '6'].includes(g.colorId));
 
         updateMetricsDisplay();
@@ -873,7 +872,6 @@
     }
 
     function applyFiltersAndRender() {
-      // Obtener arreglo de colores seleccionados en las casillas
       const selectedBoxes = Array.from(document.querySelectorAll('#expense-category-group input[type="checkbox"]:checked'))
         .map(cb => cb.value);
 
@@ -884,7 +882,6 @@
       const filterFn = (item) => {
         if (item.price < minVal || item.price > maxVal) return false;
 
-        // Filtrado dinámico multiselección de categorías para Gastos
         if (item.type === 'gasto') {
           if (selectedBoxes.includes('OTHER') && !['3', '5', '6'].includes(item.colorId)) {
             return true;
