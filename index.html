@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Dashboard Financiero - Ventas, Gastos y Ganancias</title>
+  <title>Dashboard Financiero - Ventas, Gastos y Supermercado</title>
   <!-- Google Identity Services library -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <style>
@@ -94,6 +94,9 @@
     .nav-tab.active.tab-gastos {
       background-color: #dc3545;
     }
+    .nav-tab.active.tab-super {
+      background-color: #e67c73;
+    }
     .nav-tab.active.tab-ganancias {
       background-color: #28a745;
     }
@@ -170,6 +173,17 @@
     .mode-gastos .metric-card.active {
       background-color: #f8d7da;
       box-shadow: 0 0 0 2px #dc3545;
+    }
+
+    .mode-super .metric-card {
+      border-left-color: #e67c73;
+    }
+    .mode-super .metric-value {
+      color: #e67c73;
+    }
+    .mode-super .metric-card.active {
+      background-color: #fce8e6;
+      box-shadow: 0 0 0 2px #e67c73;
     }
 
     .mode-ganancias .metric-card {
@@ -341,7 +355,6 @@
 </head>
 <body>
 
-  <!-- UNICO CONTENEDOR PRINCIPAL -->
   <div class="card">
     <h2>Dashboard Financiero Personal</h2>
     
@@ -358,6 +371,7 @@
       <div class="spa-nav">
         <button class="nav-tab active" id="tab-ventas" onclick="switchCategory('ventas')">💰 Ventas</button>
         <button class="nav-tab" id="tab-gastos" onclick="switchCategory('gastos')">💸 Gastos Empresa</button>
+        <button class="nav-tab" id="tab-super" onclick="switchCategory('super')">🛒 Supermercado</button>
         <button class="nav-tab" id="tab-ganancias" onclick="switchCategory('ganancias')">📊 Ganancias Netas</button>
       </div>
 
@@ -471,11 +485,12 @@
     const CALENDAR_VENTAS = 'pajaresmartin070@gmail.com';
     const CALENDAR_GASTOS = '65a0ee4f7b806b099ac98bdb0df66f999416d45a9e7a246f6fc3cd00a4d0725a@group.calendar.google.com';
 
-    // Expense Colors Config for Empresa
+    // Expense Colors Config for Empresa & Personal
     const GASTO_CATEGORIAS = {
       '8': { nombre: 'Sueldos', colorName: 'Grafito', hex: '#616161' },
       '5': { nombre: 'Inversión', colorName: 'Girasol', hex: '#F6BF26' },
-      '6': { nombre: 'Empresa', colorName: 'Mandarina', hex: '#F4511E' }
+      '6': { nombre: 'Empresa', colorName: 'Mandarina', hex: '#F4511E' },
+      '4': { nombre: 'Supermercado', colorName: 'Flamenco', hex: '#E67C73' }
     };
 
     let tokenClient;
@@ -485,6 +500,7 @@
     let currentCategory = 'ventas';
     let globalVentasStore = [];
     let globalGastosStore = [];
+    let globalSuperStore = [];
 
     let fetchedVentas = [];
     let fetchedGastos = [];
@@ -576,15 +592,17 @@
     function switchCategory(cat) {
       currentCategory = cat;
 
-      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active', 'tab-gastos', 'tab-ganancias'));
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active', 'tab-gastos', 'tab-super', 'tab-ganancias'));
       const activeTab = document.getElementById(`tab-${cat}`);
       activeTab.classList.add('active');
       if (cat === 'gastos') activeTab.classList.add('tab-gastos');
+      if (cat === 'super') activeTab.classList.add('tab-super');
       if (cat === 'ganancias') activeTab.classList.add('tab-ganancias');
 
       const metricsGrid = document.getElementById('metrics-grid');
       metricsGrid.className = 'metrics-grid';
       if (cat === 'gastos') metricsGrid.classList.add('mode-gastos');
+      if (cat === 'super') metricsGrid.classList.add('mode-super');
       if (cat === 'ganancias') metricsGrid.classList.add('mode-ganancias');
 
       const expenseFilterGrp = document.getElementById('expense-category-group');
@@ -597,6 +615,7 @@
       const titles = {
         'ventas': 'Resumen de Ventas',
         'gastos': 'Resumen de Gastos de Empresa',
+        'super': 'Resumen de Gastos de Supermercado',
         'ganancias': 'Resumen de Ganancias Netas (Ventas - Gastos Empresa)'
       };
       document.getElementById('metrics-title').textContent = titles[cat];
@@ -684,6 +703,7 @@
 
         globalVentasStore = ventas;
         globalGastosStore = gastos.filter(g => ['8', '5', '6'].includes(g.colorId));
+        globalSuperStore = gastos.filter(g => g.colorId === '4');
 
         updateMetricsDisplay();
         selectPresetMetric('month');
@@ -769,6 +789,7 @@
     function updateMetricsDisplay() {
       const vTotals = calculateStoreTotals(globalVentasStore);
       const gTotals = calculateStoreTotals(globalGastosStore);
+      const sTotals = calculateStoreTotals(globalSuperStore);
 
       let res = { week: 0, month: 0, sixMonths: 0, year: 0 };
 
@@ -776,6 +797,8 @@
         res = vTotals;
       } else if (currentCategory === 'gastos') {
         res = gTotals;
+      } else if (currentCategory === 'super') {
+        res = sTotals;
       } else if (currentCategory === 'ganancias') {
         res.week = vTotals.week - gTotals.week;
         res.month = vTotals.month - gTotals.month;
@@ -808,7 +831,7 @@
         if (currentCategory === 'ventas') {
           fetchedVentas = await fetchCalendarRawParams(CALENDAR_VENTAS, queryParams);
           fetchedGastos = [];
-        } else if (currentCategory === 'gastos') {
+        } else if (currentCategory === 'gastos' || currentCategory === 'super') {
           fetchedVentas = [];
           fetchedGastos = await fetchCalendarRawParams(CALENDAR_GASTOS, queryParams);
         } else {
@@ -884,13 +907,18 @@
         if (item.price < minVal || item.price > maxVal) return false;
 
         if (item.type === 'gasto') {
-          if (selectedBoxes.includes('OTHER') && !['8', '5', '6'].includes(item.colorId)) {
-            return true;
+          if (currentCategory === 'super') {
+            return item.colorId === '4';
           }
-          if (selectedBoxes.includes(item.colorId)) {
-            return true;
+          if (currentCategory === 'gastos') {
+            if (selectedBoxes.includes('OTHER') && !['8', '5', '6'].includes(item.colorId)) {
+              return true;
+            }
+            if (selectedBoxes.includes(item.colorId)) {
+              return true;
+            }
+            return false;
           }
-          return false;
         }
         return true;
       };
@@ -900,7 +928,7 @@
 
       let combined = [];
       if (currentCategory === 'ventas') combined = filteredVentas;
-      else if (currentCategory === 'gastos') combined = filteredGastos;
+      else if (currentCategory === 'gastos' || currentCategory === 'super') combined = filteredGastos;
       else combined = [...filteredVentas, ...filteredGastos].sort((a,b) => a.startDate - b.startDate);
 
       let searchVentas = filteredVentas.reduce((a,b) => a + b.price, 0);
@@ -908,7 +936,7 @@
 
       let totalVal = 0;
       if (currentCategory === 'ventas') totalVal = searchVentas;
-      else if (currentCategory === 'gastos') totalVal = searchGastos;
+      else if (currentCategory === 'gastos' || currentCategory === 'super') totalVal = searchGastos;
       else totalVal = searchVentas - searchGastos;
 
       document.getElementById('stat-search-total').textContent = `$ ${totalVal.toLocaleString()}`;
